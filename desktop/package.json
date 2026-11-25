@@ -1,7 +1,7 @@
 {
   "name": "polyforge-desktop",
   "productName": "POLYFORGE",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "description": "Cross-Platform App Converter",
   "author": { "name": "Liu Chenzhi" },
@@ -25,7 +25,7 @@
       "signAndEditExecutable": false
     },
     "portable": {
-      "artifactName": "POLYFORGE-1.0.0-Windows-x64.${ext}"
+      "artifactName": "POLYFORGE-2.0.0-Windows-x64.${ext}"
     }
   }
 }
