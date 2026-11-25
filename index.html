@@ -1,0 +1,2529 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POLYFORGE · 应用转换器</title>
+<meta name="description" content="上传文件或文件夹，识别源码语言与框架，双向生成 Windows / Android 工程骨架，并还原二进制中的线索。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%232dd4ff'/%3E%3Cstop offset='1' stop-color='%239b6bff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M32 3 57 17v30L32 61 7 47V17z' fill='none' stroke='url(%23g)' stroke-width='3'/%3E%3Crect x='19' y='25' width='11' height='16' rx='2' fill='url(%23g)'/%3E%3Crect x='34' y='21' width='10' height='15' rx='2' fill='url(%23g)'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+:root{
+  --bg:#04060b; --panel:#08101c; --panel2:#0b1523;
+  --line:#16243a; --line2:#22374f;
+  --cy:#2dd4ff; --vi:#9b6bff; --gr:#2ee6a8; --am:#ffc857; --rd:#ff6b81;
+  --tx:#e8f2ff; --dim:#8195ae; --dim2:#5a6b82;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:'Space Grotesk','Segoe UI',system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
+}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--tx);font-family:var(--sans);
+  min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased;
+}
+::selection{background:rgba(45,212,255,.3);color:#fff}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:#060b13}
+::-webkit-scrollbar-thumb{background:#1b2c42;border-radius:8px}
+::-webkit-scrollbar-thumb:hover{background:#26405e}
+
+/* ---------- backdrop ---------- */
+.bg-grid{
+  position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(45,212,255,.045) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(45,212,255,.045) 1px,transparent 1px);
+  background-size:58px 58px;
+  -webkit-mask-image:radial-gradient(circle at 50% 0%,#000 25%,transparent 72%);
+  mask-image:radial-gradient(circle at 50% 0%,#000 25%,transparent 72%);
+}
+.orb{position:fixed;border-radius:50%;filter:blur(90px);z-index:0;pointer-events:none;opacity:.5}
+.orb.a{width:520px;height:520px;top:-160px;left:-120px;background:radial-gradient(circle,rgba(45,212,255,.35),transparent 68%)}
+.orb.b{width:560px;height:560px;top:120px;right:-180px;background:radial-gradient(circle,rgba(155,107,255,.3),transparent 68%)}
+
+/* ---------- topbar ---------- */
+.topbar{
+  position:sticky;top:0;z-index:40;display:flex;align-items:center;justify-content:space-between;
+  gap:16px;padding:14px 28px;border-bottom:1px solid rgba(22,36,58,.9);
+  background:rgba(4,7,12,.72);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+}
+.brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}
+.logo{width:42px;height:42px;filter:drop-shadow(0 0 10px rgba(45,212,255,.45))}
+.brand-txt{display:flex;flex-direction:column;line-height:1.15}
+.brand-txt strong{font-size:17px;letter-spacing:.22em;font-weight:700}
+.brand-txt span{font-size:10.5px;letter-spacing:.16em;color:var(--dim2);font-family:var(--mono);text-transform:uppercase}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.pill{
+  display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;
+  padding:6px 12px;border-radius:999px;border:1px solid var(--line2);color:var(--dim);
+  background:rgba(255,255,255,.02);letter-spacing:.04em;white-space:nowrap;
+}
+.pill i{width:6px;height:6px;border-radius:50%;background:var(--gr);box-shadow:0 0 8px var(--gr);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* ---------- layout ---------- */
+main{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:0 24px 80px}
+section{scroll-margin-top:90px}
+
+/* ---------- hero ---------- */
+.hero{padding:72px 0 44px;text-align:center;position:relative}
+.hero-badge{
+  display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11px;letter-spacing:.16em;
+  color:var(--cy);padding:7px 16px;border-radius:999px;border:1px solid rgba(45,212,255,.25);
+  background:rgba(45,212,255,.06);margin-bottom:26px;text-transform:uppercase;
+}
+.hero-badge b{color:var(--vi);font-weight:500}
+.hero h1{
+  margin:0 auto;max-width:900px;font-size:clamp(30px,5vw,54px);line-height:1.18;
+  font-weight:700;letter-spacing:-.01em;
+}
+.grad{background:linear-gradient(100deg,var(--cy),var(--vi));-webkit-background-clip:text;background-clip:text;color:transparent}
+.grad2{background:linear-gradient(100deg,var(--gr),var(--cy));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero-sub{max-width:640px;margin:20px auto 0;color:var(--dim);font-size:15.5px;line-height:1.75}
+.hero-stats{display:flex;justify-content:center;gap:14px;flex-wrap:wrap;margin-top:34px}
+.hero-stats div{
+  min-width:132px;padding:14px 20px;border-radius:14px;border:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(13,22,36,.8),rgba(7,12,20,.6));
+}
+.hero-stats b{display:block;font-family:var(--mono);font-size:23px;color:#fff}
+.hero-stats span{font-size:11.5px;color:var(--dim2);letter-spacing:.06em}
+
+/* ---------- tabs ---------- */
+.tabs{
+  display:flex;gap:6px;padding:6px;border-radius:999px;border:1px solid var(--line);
+  background:rgba(8,15,26,.75);width:fit-content;margin:0 auto 30px;position:relative;z-index:2;
+}
+.tab{
+  appearance:none;border:1px solid transparent;background:transparent;color:var(--dim);cursor:pointer;
+  font-family:var(--sans);font-size:13.5px;font-weight:500;padding:10px 20px;border-radius:999px;
+  display:flex;align-items:center;gap:8px;transition:.22s;white-space:nowrap;
+}
+.tab svg{width:15px;height:15px}
+.tab:hover{color:var(--tx)}
+.tab.active{
+  color:#fff;border-color:rgba(45,212,255,.35);
+  background:linear-gradient(135deg,rgba(45,212,255,.14),rgba(155,107,255,.14));
+  box-shadow:0 0 24px -6px rgba(45,212,255,.35) inset;
+}
+
+/* ---------- panels ---------- */
+.panel{
+  position:relative;border:1px solid var(--line);border-radius:18px;padding:24px;
+  background:linear-gradient(180deg,rgba(13,22,36,.82),rgba(7,12,20,.92));
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+}
+.panel-title{display:flex;align-items:center;gap:10px;font-size:13px;font-family:var(--mono);
+  letter-spacing:.14em;color:var(--dim);text-transform:uppercase;margin:0 0 16px}
+.panel-title::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--cy);box-shadow:0 0 8px var(--cy)}
+.panel-title .r{margin-left:auto;letter-spacing:0;text-transform:none;font-size:11.5px;color:var(--dim2)}
+
+/* ---------- dropzone ---------- */
+.dropzone{
+  position:relative;overflow:hidden;border:1.5px dashed var(--line2);border-radius:20px;
+  padding:42px 24px;text-align:center;cursor:pointer;transition:.25s;
+  background:radial-gradient(700px 220px at 50% -10%,rgba(45,212,255,.09),transparent 70%);
+}
+.dropzone:hover{border-color:#2e4d6d;background:radial-gradient(700px 220px at 50% -10%,rgba(45,212,255,.14),transparent 70%)}
+.dropzone.drag{border-color:var(--cy);box-shadow:0 0 0 4px rgba(45,212,255,.07),0 0 60px rgba(45,212,255,.12) inset}
+.dropzone .scan{position:absolute;left:0;right:0;height:2px;pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(45,212,255,.85),transparent);animation:scan 3.6s linear infinite;opacity:.55}
+@keyframes scan{0%{top:-1%}100%{top:101%}}
+.drop-ico{width:64px;height:64px;margin:0 auto 16px;display:grid;place-items:center;border-radius:18px;
+  border:1px solid rgba(45,212,255,.25);background:radial-gradient(circle at 30% 20%,rgba(45,212,255,.2),rgba(155,107,255,.1));}
+.drop-ico svg{width:30px;height:30px;stroke:var(--cy)}
+.drop-title{font-size:17px;font-weight:600;margin:0 0 8px}
+.drop-sub{color:var(--dim);font-size:13px;margin:0 0 22px;font-family:var(--mono)}
+.drop-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+input[type=file]{display:none}
+
+/* ---------- buttons ---------- */
+.btn{
+  appearance:none;cursor:pointer;font-family:var(--sans);font-size:13.5px;font-weight:600;
+  padding:10px 18px;border-radius:11px;border:1px solid var(--line2);color:var(--tx);
+  background:rgba(255,255,255,.03);display:inline-flex;align-items:center;gap:8px;
+  transition:.2s;letter-spacing:.01em;
+}
+.btn svg{width:15px;height:15px}
+.btn:hover{border-color:#2f5273;background:rgba(255,255,255,.06);transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.btn.primary{
+  border:none;color:#04121c;background:linear-gradient(135deg,var(--cy),var(--vi));
+  box-shadow:0 10px 30px -10px rgba(45,212,255,.7);
+}
+.btn.primary:hover{filter:brightness(1.08);box-shadow:0 12px 34px -8px rgba(45,212,255,.85)}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.btn.sm{padding:7px 12px;font-size:12px;border-radius:9px}
+.btn.sm svg{width:13px;height:13px}
+
+/* ---------- summary ---------- */
+.view{display:none;animation:fade .4s ease}
+.view.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.summary{display:grid;grid-template-columns:1.15fr 1fr 1fr 1fr;gap:14px;margin-bottom:16px}
+.scard{border:1px solid var(--line);border-radius:15px;padding:18px;background:rgba(9,16,27,.7);position:relative;overflow:hidden}
+.scard .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--dim2);text-transform:uppercase;margin-bottom:10px}
+.scard .v{font-size:24px;font-weight:700;line-height:1.1;letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
+.scard .v small{font-size:12px;font-weight:500;color:var(--dim);letter-spacing:0}
+.scard .s{font-size:11.5px;color:var(--dim);margin-top:8px;font-family:var(--mono)}
+.scard.hero-card{grid-row:span 1;background:linear-gradient(135deg,rgba(45,212,255,.12),rgba(155,107,255,.1) 60%,rgba(9,16,27,.7));border-color:rgba(45,212,255,.3)}
+.scard.hero-card .v{font-size:30px}
+.lang-dot{width:12px;height:12px;border-radius:50%;box-shadow:0 0 12px currentColor;flex:none}
+.conf{height:5px;border-radius:99px;background:#0d1827;margin-top:12px;overflow:hidden}
+.conf i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--cy),var(--vi));transition:width 1s cubic-bezier(.2,.8,.2,1)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.chip{font-family:var(--mono);font-size:11.5px;padding:5px 11px;border-radius:8px;border:1px solid var(--line2);
+  color:var(--dim);background:rgba(255,255,255,.02);display:inline-flex;align-items:center;gap:6px}
+.chip b{color:var(--tx);font-weight:500}
+.chip.acc{border-color:rgba(45,212,255,.3);color:var(--cy);background:rgba(45,212,255,.06)}
+
+/* ---------- distribution ---------- */
+.dist{display:grid;gap:13px}
+.dist-row{display:grid;grid-template-columns:120px 1fr 54px;align-items:center;gap:14px}
+.dist-name{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500}
+.dist-name i{width:9px;height:9px;border-radius:2px;flex:none;box-shadow:0 0 8px currentColor}
+.bar{height:8px;border-radius:99px;background:#0c1725;overflow:hidden;position:relative}
+.bar>i{display:block;height:100%;border-radius:99px;width:0;transition:width 1s cubic-bezier(.2,.8,.2,1);position:relative}
+.bar>i::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);transform:translateX(-100%);animation:sheen 2.6s infinite}
+@keyframes sheen{60%,100%{transform:translateX(100%)}}
+.dist-pct{font-family:var(--mono);font-size:11.5px;color:var(--dim);text-align:right}
+
+/* ---------- file table ---------- */
+.table-wrap{max-height:330px;overflow:auto;border:1px solid var(--line);border-radius:12px;background:rgba(5,9,16,.6)}
+table.ft{width:100%;border-collapse:collapse;font-size:12.5px}
+table.ft th{
+  position:sticky;top:0;z-index:2;text-align:left;font-family:var(--mono);font-size:10.5px;font-weight:500;
+  letter-spacing:.1em;color:var(--dim2);text-transform:uppercase;padding:11px 14px;
+  background:#0a1320;border-bottom:1px solid var(--line);white-space:nowrap;
+}
+table.ft td{padding:10px 14px;border-bottom:1px solid rgba(22,36,58,.6);white-space:nowrap;vertical-align:middle}
+table.ft tr:last-child td{border-bottom:none}
+table.ft tr:hover td{background:rgba(45,212,255,.035)}
+table.ft .fname{color:var(--tx);font-family:var(--mono);font-size:12px;max-width:420px;overflow:hidden;text-overflow:ellipsis}
+table.ft .fsize{color:var(--dim);font-family:var(--mono);font-size:11.5px;text-align:right}
+table.ft .fnote{color:var(--dim2);font-size:11.5px;max-width:230px;overflow:hidden;text-overflow:ellipsis}
+.tag{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;
+  padding:3px 8px;border-radius:6px;border:1px solid currentColor;background:rgba(255,255,255,.03);line-height:1.5}
+.tag i{width:5px;height:5px;border-radius:50%;background:currentColor}
+
+/* ---------- convert ---------- */
+.targets{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:8px 0 20px}
+.target{
+  position:relative;cursor:pointer;border:1px solid var(--line);border-radius:14px;padding:16px;
+  background:rgba(9,16,27,.6);transition:.22s;text-align:left;
+}
+.target:hover{border-color:#2b4562;transform:translateY(-2px)}
+.target.on{border-color:rgba(45,212,255,.55);background:linear-gradient(150deg,rgba(45,212,255,.12),rgba(155,107,255,.08));box-shadow:0 0 34px -14px rgba(45,212,255,.8)}
+.target .ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;border:1px solid var(--line2);margin-bottom:12px;background:rgba(255,255,255,.03)}
+.target .ic svg{width:18px;height:18px;stroke:var(--cy)}
+.target h4{margin:0 0 5px;font-size:14px;font-weight:600}
+.target p{margin:0;font-size:11.5px;color:var(--dim2);line-height:1.55}
+.target .rec{position:absolute;top:12px;right:12px;font-family:var(--mono);font-size:9.5px;
+  padding:2px 7px;border-radius:5px;color:var(--gr);border:1px solid rgba(46,230,168,.35);background:rgba(46,230,168,.08)}
+.target.disabled{opacity:.45;pointer-events:none;filter:grayscale(.4)}
+
+.field{display:flex;flex-direction:column;gap:7px;margin-bottom:18px}
+.field label{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;color:var(--dim2);text-transform:uppercase}
+.field input{
+  background:rgba(255,255,255,.03);border:1px solid var(--line2);border-radius:10px;padding:11px 13px;
+  color:var(--tx);font-family:var(--mono);font-size:13px;outline:none;transition:.2s;
+}
+.field input:focus{border-color:rgba(45,212,255,.6);box-shadow:0 0 0 3px rgba(45,212,255,.08)}
+
+/* pipeline */
+.pipeline{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0}
+.step{
+  border:1px solid var(--line);border-radius:11px;padding:12px 14px;background:rgba(5,9,16,.6);
+  font-size:12px;color:var(--dim2);display:flex;align-items:center;gap:9px;transition:.3s;
+}
+.step .dot{width:7px;height:7px;border-radius:50%;background:#22374f;flex:none;transition:.3s}
+.step.on{border-color:rgba(45,212,255,.45);color:var(--tx);background:rgba(45,212,255,.07)}
+.step.on .dot{background:var(--cy);box-shadow:0 0 10px var(--cy);animation:pulse 1s infinite}
+.step.done{color:var(--gr);border-color:rgba(46,230,168,.3)}
+.step.done .dot{background:var(--gr);box-shadow:0 0 8px var(--gr)}
+.log{
+  font-family:var(--mono);font-size:11.5px;line-height:1.85;color:var(--dim);background:#05090f;
+  border:1px solid var(--line);border-radius:10px;padding:12px 14px;max-height:122px;overflow:auto;
+}
+.log div{animation:fade .25s}
+.log b{color:var(--cy);font-weight:400}
+.log .ok{color:var(--gr)}
+
+/* result */
+.workspace{display:grid;grid-template-columns:250px 1fr;gap:14px;margin-top:18px}
+.tree{border:1px solid var(--line);border-radius:12px;background:rgba(5,9,16,.65);padding:10px;max-height:430px;overflow:auto}
+.tree .grp{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--dim2);padding:8px 8px 6px;text-transform:uppercase}
+.fitem{
+  display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:8px;cursor:pointer;
+  font-family:var(--mono);font-size:11.5px;color:var(--dim);border:1px solid transparent;transition:.15s;
+}
+.fitem:hover{background:rgba(255,255,255,.04);color:var(--tx)}
+.fitem.on{background:rgba(45,212,255,.09);border-color:rgba(45,212,255,.3);color:#fff}
+.fitem svg{width:13px;height:13px;flex:none;opacity:.7}
+.codebox{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#05090f;display:flex;flex-direction:column;min-height:430px}
+.codehead{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);
+  background:#08111c;font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+.codehead .fn{color:var(--tx)}
+.codehead .sp{margin-left:auto;display:flex;gap:6px}
+pre.code{margin:0;padding:16px;overflow:auto;max-height:470px;font-family:var(--mono);font-size:12px;line-height:1.72;color:#c7d6e8;tab-size:2}
+pre.code .c{color:#5f7590}
+pre.code .k{color:#9b6bff}
+pre.code .s{color:#2ee6a8}
+pre.code .n{color:#ffc857}
+
+.note{
+  display:flex;gap:10px;padding:12px 14px;border-radius:11px;font-size:12px;line-height:1.65;
+  border:1px solid rgba(255,200,87,.25);background:rgba(255,200,87,.06);color:#e6c98a;margin-top:16px;
+}
+.note svg{width:16px;height:16px;flex:none;stroke:var(--am);margin-top:1px}
+
+/* binary */
+.meta-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.meta{background:rgba(5,9,16,.6);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.meta .k{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--dim2);text-transform:uppercase;margin-bottom:7px}
+.meta .v{font-family:var(--mono);font-size:14px;font-weight:500;word-break:break-all}
+.strlist{max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:12px;background:#05090f;padding:6px}
+.str{display:flex;gap:10px;padding:6px 10px;border-radius:7px;font-family:var(--mono);font-size:11.5px;color:#a9bccf;line-height:1.6}
+.str:hover{background:rgba(45,212,255,.05)}
+.str .idx{color:#3c5674;flex:none;width:34px;text-align:right}
+.str .txt{word-break:break-all}
+.str.hl .txt{color:var(--cy)}
+.binary-file{
+  display:flex;align-items:center;gap:12px;padding:14px 16px;border:1px dashed var(--line2);
+  border-radius:12px;font-family:var(--mono);font-size:12.5px;color:var(--dim);margin-bottom:16px;
+}
+.binary-file .f{color:var(--tx)}
+.binary-file .s{margin-left:auto;font-size:11px;color:var(--dim2)}
+.empty{padding:44px 20px;text-align:center;color:var(--dim2);font-size:13px;line-height:1.8}
+.empty svg{width:34px;height:34px;stroke:#2a4059;margin-bottom:12px}
+
+/* about */
+.about-btn{white-space:nowrap}
+.modal{
+  position:fixed;inset:0;z-index:120;display:none;place-items:center;padding:24px;
+  background:rgba(2,5,10,.78);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+}
+.modal.open{display:grid;animation:fade .25s ease}
+.modal-card{
+  position:relative;width:min(420px,100%);border:1px solid rgba(45,212,255,.28);border-radius:22px;
+  padding:40px 30px 28px;text-align:center;background:linear-gradient(180deg,#0c1727,#070d17);
+  box-shadow:0 40px 120px -30px rgba(45,212,255,.35);
+}
+.modal-x{
+  position:absolute;top:12px;right:12px;width:30px;height:30px;border-radius:9px;border:1px solid var(--line2);
+  background:rgba(255,255,255,.03);color:var(--dim);font-size:17px;cursor:pointer;line-height:1;transition:.2s;
+}
+.modal-x:hover{color:#fff;border-color:#3d6390}
+.modal-logo{width:66px;height:66px;margin:0 auto 16px;filter:drop-shadow(0 0 20px rgba(45,212,255,.5))}
+.modal-card h3{margin:0 0 5px;font-size:20px;letter-spacing:.24em;font-weight:700}
+.modal-tag{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--dim2);text-transform:uppercase;margin-bottom:26px}
+.modal-credit{
+  margin:0 0 10px;font-size:23px;font-weight:700;letter-spacing:.03em;
+  background:linear-gradient(100deg,var(--cy),var(--vi));-webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.modal-credit-en{margin:0 0 24px;font-size:13px;color:var(--dim);letter-spacing:.02em;font-family:var(--mono)}
+.modal-meta{font-family:var(--mono);font-size:10.5px;line-height:1.9;color:var(--dim2);border-top:1px solid var(--line);padding-top:16px}
+
+/* footer */
+footer{
+  border-top:1px solid var(--line);padding:26px 24px 40px;text-align:center;
+  color:var(--dim2);font-size:11.5px;font-family:var(--mono);line-height:1.9;position:relative;z-index:1;
+}
+footer b{color:var(--dim)}
+
+/* toast */
+.toast{
+  position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);z-index:99;
+  padding:11px 18px;border-radius:11px;background:#0d1a2b;border:1px solid rgba(45,212,255,.35);
+  color:var(--tx);font-size:12.5px;font-family:var(--mono);opacity:0;pointer-events:none;
+  transition:.28s;box-shadow:0 18px 50px -14px rgba(0,0,0,.9)
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+@media(max-width:960px){
+  .summary{grid-template-columns:1fr 1fr}
+  .workspace{grid-template-columns:1fr}
+  .targets{grid-template-columns:1fr}
+  .meta-grid{grid-template-columns:1fr 1fr}
+  .pipeline{grid-template-columns:1fr 1fr}
+}
+@media(max-width:620px){
+  main{padding:0 16px 60px}
+  .topbar{padding:12px 16px}
+  .brand-txt span{display:none}
+  .pill{display:none}
+  .hero{padding:48px 0 30px}
+  .summary{grid-template-columns:1fr}
+  .hero-stats div{flex:1 1 40%}
+  .dist-row{grid-template-columns:96px 1fr 46px}
+  .dropzone{padding:32px 16px}
+  .panel{padding:18px}
+  .tabs{width:100%;overflow-x:auto}
+  .tab{padding:9px 13px;font-size:12px}
+}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="orb a"></div><div class="orb b"></div>
+
+<header class="topbar">
+  <a class="brand" href="#top">
+    <svg class="logo" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="lg" x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stop-color="#2dd4ff"/><stop offset="1" stop-color="#9b6bff"/>
+        </linearGradient>
+        <filter id="fglow" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="1.8" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <path d="M32 4 56 17.5v29L32 60 8 46.5v-29L32 4Z" stroke="url(#lg)" stroke-width="2.4" filter="url(#fglow)"/>
+      <path d="M32 12.5 47.5 21v21L32 51.5 16.5 42V21L32 12.5Z" stroke="url(#lg)" stroke-width="1" opacity=".35"/>
+      <rect x="19.5" y="26" width="10.5" height="15" rx="1.8" fill="url(#lg)"/>
+      <rect x="33" y="21.5" width="9.5" height="15.5" rx="2.2" fill="url(#lg)"/>
+      <path d="M30 22.5h3.2" stroke="url(#lg)" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="37.7" cy="34.4" r="0.9" fill="#04060b"/>
+      <path d="M24 41.6h3" stroke="#04060b" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>
+    <div class="brand-txt">
+      <strong>POLYFORGE</strong>
+      <span>App Transpiler · 应用转换器</span>
+    </div>
+  </a>
+  <div class="topbar-right">
+    <span class="pill live"><i></i>本地引擎 · 不上传</span>
+    <button class="btn sm about-btn" id="aboutBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+      关于 <span style="color:var(--dim2)">/ About</span>
+    </button>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="hero-badge">WINDOWS <b>⇄</b> ANDROID · 双向转换</div>
+    <h1>把桌面应用<span class="grad">转换</span>成手机应用<br>把二进制<span class="grad2">还原</span>成源代码</h1>
+    <p class="hero-sub">上传文件或整个文件夹，自动识别源码语言、UI 框架与运行平台；一键生成目标平台的工程骨架，或从二进制中提取线索并重建源码结构。</p>
+    <div class="hero-stats">
+      <div><b>32+</b><span>可识别语言</span></div>
+      <div><b>18</b><span>框架特征库</span></div>
+      <div><b>2</b><span>目标平台</span></div>
+      <div><b>0</b><span>文件被上传</span></div>
+    </div>
+  </section>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-view="detect">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m8 6-6 6 6 6M16 6l6 6-6 6"/></svg>
+      语言识别
+    </button>
+    <button class="tab" data-view="convert">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h11l-3-3M20 17H9l3 3"/><path d="M17 4v6M7 14v6"/></svg>
+      应用转换
+    </button>
+    <button class="tab" data-view="binary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h1.5v6H9M14 9h1a2 2 0 0 1 0 4h-1a2 2 0 0 0 0 4h1"/></svg>
+      二进制还原
+    </button>
+  </nav>
+
+  <!-- 上传区 -->
+  <div class="panel" style="margin-bottom:18px">
+    <div class="dropzone" id="dropzone">
+      <div class="scan"></div>
+      <div class="drop-ico">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/>
+        </svg>
+      </div>
+      <h3 class="drop-title">拖拽文件或整个文件夹到此处</h3>
+      <p class="drop-sub">支持 .exe / .dll / .apk / .cs / .kt / .java / .dart / .py 等 60+ 格式</p>
+      <div class="drop-actions">
+        <button class="btn primary" id="pickFiles">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5"/></svg>
+          选择文件
+        </button>
+        <button class="btn" id="pickFolder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
+          选择文件夹
+        </button>
+        <button class="btn" id="loadDemo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5Z"/></svg>
+          载入演示工程
+        </button>
+      </div>
+      <input type="file" id="fileInput" multiple>
+      <input type="file" id="folderInput" webkitdirectory directory multiple>
+    </div>
+    <div id="selection" style="display:none;margin-top:16px"></div>
+  </div>
+
+  <!-- 识别 -->
+  <section class="view active" id="view-detect">
+    <div id="detectEmpty" class="panel">
+      <div class="empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.4"><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1M7.7 16.3l-2.1 2.1"/><circle cx="12" cy="12" r="3.5"/></svg>
+        <div>还没有文件。上传源码目录、可执行文件或 APK，<br>引擎会逐文件解析语言、框架与平台归属。</div>
+      </div>
+    </div>
+    <div id="detectResult" style="display:none">
+      <div class="summary" id="summary"></div>
+      <div class="panel" style="margin-bottom:18px">
+        <div class="panel-title">LANGUAGE DISTRIBUTION · 语言分布 <span class="r" id="distHint"></span></div>
+        <div class="dist" id="dist"></div>
+      </div>
+      <div class="panel" style="margin-bottom:18px">
+        <div class="panel-title">FRAMEWORKS · 框架特征 <span class="r">基于文件签名与依赖清单</span></div>
+        <div class="chips" id="fwChips"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">FILES · 逐文件识别 <span class="r" id="fileHint"></span></div>
+        <div class="table-wrap">
+          <table class="ft">
+            <thead><tr><th>路径</th><th>语言 / 格式</th><th>判定依据</th><th style="text-align:right">大小</th></tr></thead>
+            <tbody id="fileBody"></tbody>
+          </table>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+          <button class="btn" id="exportReport">导出识别报告</button>
+          <button class="btn primary" id="toConvert">用此项目生成转换工程 →</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 转换 -->
+  <section class="view" id="view-convert">
+    <div id="convertEmpty" class="panel">
+      <div class="empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.4"><path d="M4 8h13l-3-3M20 16H7l3 3"/><rect x="2" y="3" width="6" height="5" rx="1"/><rect x="16" y="16" width="6" height="5" rx="1"/></svg>
+        <div>先在上方上传桌面应用或安卓应用的源码 / 安装包，<br>再选择目标平台生成对应的工程骨架。</div>
+      </div>
+    </div>
+    <div id="convertResult" style="display:none">
+      <div class="panel" style="margin-bottom:18px">
+        <div class="panel-title">SOURCE · 源项目 <span class="r" id="srcHint"></span></div>
+        <div id="srcSummary"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">TARGET · 选择目标平台</div>
+        <div class="targets" id="targets"></div>
+        <div class="field">
+          <label>应用名称</label>
+          <input id="appName" value="MyForgeApp" spellcheck="false">
+        </div>
+        <button class="btn primary" id="runConvert">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5Z"/></svg>
+          开始转换
+        </button>
+        <div class="pipeline" id="pipeline">
+          <div class="step"><span class="dot"></span>解析源工程</div>
+          <div class="step"><span class="dot"></span>抽取 UI 与逻辑</div>
+          <div class="step"><span class="dot"></span>映射平台 API</div>
+          <div class="step"><span class="dot"></span>生成目标骨架</div>
+        </div>
+        <div class="log" id="convertLog" style="display:none"></div>
+        <div id="convertOut" style="display:none">
+          <div class="workspace">
+            <div class="tree" id="tree"></div>
+            <div class="codebox">
+              <div class="codehead">
+                <span class="fn" id="codeFile">—</span>
+                <span class="sp">
+                  <button class="btn sm" id="copyCode">复制</button>
+                  <button class="btn sm" id="dlFile">下载文件</button>
+                </span>
+              </div>
+              <pre class="code" id="codePre"></pre>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+            <button class="btn primary" id="dlZip">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+              下载完整工程 (.zip)
+            </button>
+            <button class="btn" id="dlPlan">导出迁移清单</button>
+          </div>
+          <div class="note">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v5h1"/></svg>
+            <div>转换结果为目标平台的工程骨架与 API 映射清单，用于加速移植；复杂的业务逻辑与原生依赖仍需人工迁移。所有分析均在浏览器本地完成。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 二进制 -->
+  <section class="view" id="view-binary">
+    <div class="panel" style="margin-bottom:18px">
+      <div class="panel-title">BINARY · 二进制分析 <span class="r">PE · ELF · APK · DEX · .NET</span></div>
+      <div id="binEmpty" class="empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.4"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h1.5v6H9M14 9h1a2 2 0 0 1 0 4h-1a2 2 0 0 0 0 4h1"/></svg>
+        <div>上传一个 .exe / .dll / .apk / .so / .dex / .class 文件，<br>或点击上方「载入演示工程」查看完整效果。</div>
+      </div>
+      <div id="binResult" style="display:none">
+        <div class="binary-file" id="binFileLine"></div>
+        <div class="meta-grid" id="binMeta"></div>
+        <div class="panel-title" style="margin-top:22px">EXTRACTED STRINGS · 可读字符串 <span class="r" id="strHint"></span></div>
+        <div class="chips" id="strFilters" style="margin-bottom:10px"></div>
+        <div class="strlist" id="strList"></div>
+        <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+          <button class="btn primary" id="reconstruct">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m8 6-6 6 6 6M16 6l6 6-6 6"/></svg>
+            重建源代码
+          </button>
+          <button class="btn" id="dlBinReport">导出分析报告</button>
+        </div>
+        <div id="reconOut" style="display:none">
+          <div class="codebox" style="margin-top:16px;min-height:0">
+            <div class="codehead">
+              <span class="fn" id="reconFile">—</span>
+              <span class="sp"><button class="btn sm" id="copyRecon">复制</button></span>
+            </div>
+            <pre class="code" id="reconPre" style="max-height:400px"></pre>
+          </div>
+          <div class="note">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v5h1"/></svg>
+            <div>二进制无法 100% 还原为原始源码。这里基于文件头、运行时字符串、依赖符号与调用特征，重建出<strong>语义等价的结构骨架</strong>，并标注可读的常量、资源与接口线索。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <b>POLYFORGE</b> · 本地分析引擎 v1.0 — 文件只在你的浏览器内解析，不会离开本机<br>
+  Detection engine: magic bytes · extension matrix · content signatures · entropy sampling
+</footer>
+
+<div class="modal" id="aboutModal" role="dialog" aria-modal="true" aria-label="关于 About">
+  <div class="modal-card">
+    <button class="modal-x" id="aboutClose" aria-label="关闭">×</button>
+    <svg class="modal-logo" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="mg" x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stop-color="#2dd4ff"/><stop offset="1" stop-color="#9b6bff"/>
+        </linearGradient>
+      </defs>
+      <path d="M32 4 56 17.5v29L32 60 8 46.5v-29L32 4Z" stroke="url(#mg)" stroke-width="2.4"/>
+      <path d="M32 12.5 47.5 21v21L32 51.5 16.5 42V21L32 12.5Z" stroke="url(#mg)" stroke-width="1" opacity=".35"/>
+      <rect x="19.5" y="26" width="10.5" height="15" rx="1.8" fill="url(#mg)"/>
+      <rect x="33" y="21.5" width="9.5" height="15.5" rx="2.2" fill="url(#mg)"/>
+      <path d="M30 22.5h3.2" stroke="url(#mg)" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="37.7" cy="34.4" r="0.9" fill="#04060b"/>
+      <path d="M24 41.6h3" stroke="#04060b" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>
+    <h3>POLYFORGE</h3>
+    <div class="modal-tag">Cross-Platform App Converter</div>
+    <p class="modal-credit">刘宸至一手创作！</p>
+    <p class="modal-credit-en">Solely created by Liu Chenzhi.</p>
+    <div class="modal-meta">
+      跨平台应用转换器 · Cross-Platform App Converter<br>
+      Version 1.0 · 2026
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+/* ============================================================
+   POLYFORGE · 本地分析引擎
+   ============================================================ */
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const pad2 = n => String(n).padStart(2, '0');
+const latin1 = new TextDecoder('latin1');
+
+function fmtBytes(n) {
+  if (n === undefined || n === null) return '—';
+  if (n === 0) return '0 B';
+  const u = ['B', 'KB', 'MB', 'GB'];
+  let v = n, i = 0;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return (i === 0 ? v : v.toFixed(v < 10 ? 1 : 0)) + ' ' + u[i];
+}
+let toastTimer = null;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+}
+function bytesToBase64(u8) {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < u8.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, u8.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+function downloadBlob(name, blob) {
+  // Android 壳：通过 JS Bridge 保存到系统下载目录
+  if (window.AndroidBridge && typeof window.AndroidBridge.saveFile === 'function') {
+    blob.arrayBuffer().then(buf => {
+      try { window.AndroidBridge.saveFile(name, bytesToBase64(new Uint8Array(buf)), blob.type || ''); }
+      catch (e) { /* ignore */ }
+    });
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+function downloadText(name, text, mime = 'text/plain;charset=utf-8') {
+  downloadBlob(name, new Blob([text], { type: mime }));
+}
+
+/* ---------------- 语言库 ---------------- */
+const LANGS = {
+  csharp:    { n: 'C#',            c: '#9b6bff', hint: 'C# / .NET',        plat: 'windows' },
+  xaml:      { n: 'XAML',          c: '#c084fc', hint: 'WPF / WinUI 界面',  plat: 'windows' },
+  vb:        { n: 'Visual Basic',  c: '#a78bfa', hint: 'VB.NET',            plat: 'windows' },
+  cpp:       { n: 'C++',           c: '#38bdf8', hint: '原生 / Qt',         plat: 'windows' },
+  c:         { n: 'C',             c: '#60a5fa', hint: '原生系统',          plat: 'other' },
+  rust:      { n: 'Rust',          c: '#ff9a6c', hint: 'Tauri / 系统工具',  plat: 'cross' },
+  go:        { n: 'Go',            c: '#22d3ee', hint: 'CLI / 服务端',      plat: 'other' },
+  python:    { n: 'Python',        c: '#ffd166', hint: 'PyQt / 脚本',       plat: 'windows' },
+  javascript:{ n: 'JavaScript',    c: '#f7df1e', hint: 'Electron / Node',   plat: 'cross' },
+  typescript:{ n: 'TypeScript',    c: '#3b82f6', hint: 'Electron / React',  plat: 'cross' },
+  java:      { n: 'Java',          c: '#f97316', hint: 'Android / JVM',     plat: 'android' },
+  kotlin:    { n: 'Kotlin',        c: '#a97bff', hint: 'Android / Compose', plat: 'android' },
+  dart:      { n: 'Dart',          c: '#2dd4ff', hint: 'Flutter 跨平台',    plat: 'cross' },
+  swift:     { n: 'Swift',         c: '#ff6b81', hint: 'iOS / macOS',       plat: 'ios' },
+  objc:      { n: 'Objective-C',   c: '#818cf8', hint: 'iOS / macOS',       plat: 'ios' },
+  html:      { n: 'HTML',          c: '#e34f26', hint: '界面结构',          plat: 'web' },
+  css:       { n: 'CSS',           c: '#3b82f6', hint: '样式表',            plat: 'web' },
+  json:      { n: 'JSON',          c: '#8ea3bd', hint: '配置 / 数据',       plat: 'other' },
+  xml:       { n: 'XML',           c: '#8ea3bd', hint: '配置 / 布局',       plat: 'other' },
+  gradle:    { n: 'Gradle',        c: '#0ac09a', hint: 'Android 构建',      plat: 'android' },
+  shell:     { n: 'Shell',         c: '#8be9a8', hint: '脚本',              plat: 'other' },
+  powershell:{ n: 'PowerShell',    c: '#5aa9ff', hint: 'Windows 脚本',      plat: 'windows' },
+  sql:       { n: 'SQL',           c: '#f0a35e', hint: '数据库',            plat: 'other' },
+  asm:       { n: 'Assembly',      c: '#94a3b8', hint: '汇编',              plat: 'other' },
+  lua:       { n: 'Lua',           c: '#6ea8fe', hint: '嵌入脚本',          plat: 'other' },
+  php:       { n: 'PHP',           c: '#8892bf', hint: 'Web 后端',          plat: 'web' },
+  ruby:      { n: 'Ruby',          c: '#ff5f57', hint: 'Web / 脚本',        plat: 'web' },
+  perl:      { n: 'Perl',          c: '#8ea3bd', hint: '脚本',              plat: 'other' },
+  scala:     { n: 'Scala',         c: '#e11d48', hint: 'JVM',               plat: 'android' },
+  unknown:   { n: '未知 / 二进制', c: '#64748b', hint: '未识别格式',        plat: 'other' }
+};
+const langOf = (k) => LANGS[k] || LANGS.unknown;
+
+const EXT_MAP = {
+  cs: 'csharp', xaml: 'xaml', vb: 'vb', fs: 'csharp',
+  cpp: 'cpp', cc: 'cpp', cxx: 'cpp', hpp: 'cpp', hh: 'cpp', h: 'cpp', inl: 'cpp',
+  c: 'c', m: 'objc', mm: 'objc',
+  rs: 'rust', go: 'go',
+  py: 'python', pyw: 'python', pyc: 'python',
+  js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'javascript',
+  ts: 'typescript', tsx: 'typescript',
+  java: 'java', kt: 'kotlin', kts: 'kotlin', scala: 'scala', groovy: 'gradle', gradle: 'gradle',
+  dart: 'dart', swift: 'swift',
+  html: 'html', htm: 'html', vue: 'html', svelte: 'html',
+  css: 'css', scss: 'css', sass: 'css', less: 'css',
+  json: 'json', jsonc: 'json', xml: 'xml', xsd: 'xml', csproj: 'xml', vbproj: 'xml',
+  sln: 'csharp', props: 'xml', targets: 'xml', plist: 'xml', manifest: 'xml',
+  yml: 'json', yaml: 'json', toml: 'json', ini: 'json', cfg: 'json', conf: 'json',
+  sh: 'shell', bash: 'shell', zsh: 'shell', ps1: 'powershell', bat: 'powershell', cmd: 'powershell',
+  sql: 'sql', asm: 'asm', s: 'asm', lua: 'lua', php: 'php', rb: 'ruby', pl: 'perl', pm: 'perl',
+  jar: 'java', class: 'java', dex: 'kotlin',
+  exe: 'csharp', dll: 'csharp'
+};
+
+const NAME_RULES = [
+  { re: /^pubspec\.ya?ml$/i,                lang: 'dart',    fw: 'Flutter',          w: 12, note: 'Flutter 工程清单' },
+  { re: /^androidmanifest\.xml$/i,         lang: 'xml',     fw: 'Android',          w: 12, note: 'Android 应用清单' },
+  { re: /^build\.gradle(\.kts)?$/i,        lang: 'gradle',  fw: 'Android Gradle',   w: 10, note: 'Android 构建脚本' },
+  { re: /^settings\.gradle(\.kts)?$/i,     lang: 'gradle',  fw: 'Android Gradle',   w: 8,  note: 'Gradle 设置' },
+  { re: /\.csproj$/i,                      lang: 'csharp',  fw: '.NET',             w: 12, note: 'C# 项目文件' },
+  { re: /\.vbproj$/i,                      lang: 'vb',      fw: '.NET / VB',        w: 12, note: 'VB.NET 项目文件' },
+  { re: /\.sln$/i,                         lang: 'csharp',  fw: '.NET 解决方案',    w: 10, note: 'Visual Studio 解决方案' },
+  { re: /^app\.xaml$/i,                    lang: 'xaml',    fw: 'WPF',              w: 8,  note: 'WPF 应用资源' },
+  { re: /^package\.json$/i,                lang: 'json',    fw: 'Node / Electron',  w: 9,  note: 'npm 工程清单' },
+  { re: /^cargo\.toml$/i,                  lang: 'rust',    fw: 'Rust / Tauri',     w: 11, note: 'Cargo 工程清单' },
+  { re: /^go\.mod$/i,                      lang: 'go',      fw: 'Go Module',        w: 11, note: 'Go 模块定义' },
+  { re: /^requirements\.txt$/i,            lang: 'python',  fw: 'Python',           w: 8,  note: 'Python 依赖清单' },
+  { re: /^info\.plist$/i,                  lang: 'xml',     fw: 'iOS / macOS',      w: 11, note: 'Apple 应用清单' },
+  { re: /^tauri\.conf\.json$/i,            lang: 'json',    fw: 'Tauri',            w: 12, note: 'Tauri 配置' },
+  { re: /^assembly-csharp\.dll$/i,         lang: 'csharp',  fw: 'Unity',            w: 12, note: 'Unity 程序集' },
+  { re: /\.designer\.cs$/i,                lang: 'csharp',  fw: 'WinForms',         w: 10, note: 'WinForms 设计器' },
+  { re: /^mainwindow\.xaml$/i,             lang: 'xaml',    fw: 'WPF',              w: 8,  note: 'WPF 主窗口' },
+  { re: /^mainactivity\.(kt|java)$/i,      lang: 'kotlin',  fw: 'Android',          w: 8,  note: 'Android 入口 Activity' },
+  { re: /^app\.dart$/i,                    lang: 'dart',    fw: 'Flutter',          w: 10, note: 'Flutter 入口' }
+];
+
+const SIGNATURES = [
+  { re: /\busing System(\.|\s*;)/,                        lang: 'csharp',     w: 6, note: 'C# 命名空间' },
+  { re: /<Window[\s>]|<UserControl[\s>]|<Page[\s>]/,      lang: 'xaml',       w: 8, fw: 'WPF / WinUI', note: 'XAML 布局根节点' },
+  { re: /<Project Sdk="Microsoft\.NET/i,                   lang: 'xml',        w: 8, fw: '.NET SDK', note: '.NET SDK 项目' },
+  { re: /xmlns:android="http:\/\/schemas\.android\.com/i,  lang: 'xml',        w: 8, fw: 'Android', note: 'Android 命名空间' },
+  { re: /^import androidx\./m,                            lang: 'kotlin',     w: 7, fw: 'AndroidX', note: 'AndroidX 依赖' },
+  { re: /^import android\./m,                             lang: 'java',       w: 6, fw: 'Android', note: 'Android SDK 导入' },
+  { re: /from ['"]react['"]|require\(['"]react['"]\)/,     lang: 'javascript', w: 7, fw: 'React', note: 'React 组件' },
+  { re: /from PyQt5|from PySide|import tkinter/,           lang: 'python',     w: 7, fw: 'Python 桌面', note: 'Python GUI 库' },
+  { re: /^#include\s*[<"]/m,                              lang: 'cpp',        w: 5, note: 'C/C++ 头文件' },
+  { re: /^use\s+(std|serde|tauri)::/m,                    lang: 'rust',       w: 6, fw: 'Rust', note: 'Rust 模块' },
+  { re: /^package main$/m,                                lang: 'go',         w: 6, fw: 'Go', note: 'Go main 包' },
+  { re: /^import (SwiftUI|UIKit)/m,                       lang: 'swift',      w: 8, fw: 'SwiftUI / UIKit', note: 'Apple UI 框架' },
+  { re: /^import ['"]package:flutter\//m,                lang: 'dart',       w: 9, fw: 'Flutter', note: 'Flutter 框架导入' },
+  { re: /"main"\s*:\s*"[^"]*electron|require\(['"]electron['"]\)/, lang: 'javascript', w: 8, fw: 'Electron', note: 'Electron 主进程' },
+  { re: /^\s*procedure\s+TForm|object\s+\w+\s*:\s*TForm/mi, lang: 'vb',      w: 6, fw: 'Delphi / VB', note: '表单定义' },
+  { re: /fun\s+\w+\s*\(|@Composable/,                     lang: 'kotlin',     w: 5, fw: 'Jetpack Compose', note: 'Kotlin / Compose' },
+  { re: /public\s+class\s+\w+\s+extends\s+(Activity|AppCompatActivity)/, lang: 'java', w: 7, fw: 'Android', note: 'Android Activity' },
+  { re: /namespace\s+[A-Z]\w+(\.\w+)*\s*\{/,              lang: 'csharp',     w: 4, note: 'C# 命名空间声明' },
+  { re: /\[HttpGet\]|\[ApiController\]|using Microsoft\.AspNetCore/, lang: 'csharp', w: 5, fw: 'ASP.NET Core', note: 'ASP.NET 控制器' }
+];
+
+const BIN_EXT = new Set(['exe', 'dll', 'sys', 'apk', 'ipa', 'aab', 'xapk', 'so', 'dylib', 'class', 'dex', 'jar', 'pyc', 'wasm', 'o', 'a', 'lib', 'appx', 'msix', 'bin', 'dat', 'db', 'pak']);
+const TEXT_EXT = new Set(['cs', 'xaml', 'vb', 'cpp', 'cc', 'cxx', 'hpp', 'h', 'c', 'm', 'mm', 'rs', 'go', 'py', 'pyw', 'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'java', 'kt', 'kts', 'scala', 'groovy', 'gradle', 'dart', 'swift', 'html', 'htm', 'vue', 'svelte', 'css', 'scss', 'sass', 'less', 'json', 'jsonc', 'xml', 'xsd', 'csproj', 'vbproj', 'sln', 'props', 'targets', 'plist', 'manifest', 'yml', 'yaml', 'toml', 'ini', 'cfg', 'conf', 'sh', 'bash', 'zsh', 'ps1', 'bat', 'cmd', 'sql', 'asm', 's', 'lua', 'php', 'rb', 'pl', 'pm', 'md', 'txt', 'gitignore', 'editorconfig', 'gradle']);
+
+/* ---------------- 状态 ---------------- */
+const state = {
+  entries: [], analysis: null, tab: 'detect',
+  target: 'android', out: null, activeFile: 0,
+  binEntry: null, bin: null, strFilter: 'all',
+  running: false, appNameTouched: false
+};
+
+/* ---------------- 文件头识别 ---------------- */
+function detectMagic(u8) {
+  if (!u8 || u8.length < 4) return null;
+  const b = u8;
+  if (b[0] === 0x4D && b[1] === 0x5A) return { fmt: 'PE', label: 'Windows PE', os: 'Windows' };
+  if (b[0] === 0x7F && b[1] === 0x45 && b[2] === 0x4C && b[3] === 0x46) return { fmt: 'ELF', label: 'ELF 可执行', os: 'Linux/Android' };
+  if (b[0] === 0x50 && b[1] === 0x4B && (b[2] === 0x03 || b[2] === 0x05) && (b[3] === 0x04 || b[3] === 0x06)) return { fmt: 'ZIP', label: 'ZIP 容器', os: '—' };
+  if (b[0] === 0x64 && b[1] === 0x65 && b[2] === 0x78 && b[3] === 0x0A) return { fmt: 'DEX', label: 'Dalvik 字节码', os: 'Android' };
+  if (b[0] === 0xCA && b[1] === 0xFE && b[2] === 0xBA && b[3] === 0xBE) return { fmt: 'CLASS', label: 'Java Class / Mach-O', os: 'JVM' };
+  if (b[0] === 0xCE && b[1] === 0xFA && b[2] === 0xED && b[3] === 0xFE) return { fmt: 'MACHO', label: 'Mach-O', os: 'macOS/iOS' };
+  if (b[0] === 0x00 && b[1] === 0x61 && b[2] === 0x73 && b[3] === 0x6D) return { fmt: 'WASM', label: 'WebAssembly', os: 'Web' };
+  if (b[0] === 0x21 && b[1] === 0x3C && b[2] === 0x61 && b[3] === 0x72) return { fmt: 'AR', label: '静态库归档', os: '—' };
+  return null;
+}
+function looksTextual(u8) {
+  if (!u8.length) return false;
+  let zeros = 0;
+  const n = Math.min(u8.length, 1024);
+  for (let i = 0; i < n; i++) if (u8[i] === 0) zeros++;
+  return zeros / n < 0.05;
+}
+function addVote(res, lang, w, fw, note) {
+  if (!lang) return;
+  res.votes[lang] = (res.votes[lang] || 0) + w;
+  if (fw && !res.fws.includes(fw)) res.fws.push(fw);
+  if (note && !res._notes.includes(note)) res._notes.push(note);
+}
+
+/* ---------------- 单文件分析 ---------------- */
+async function analyzeFile(entry) {
+  const { file, path } = entry;
+  const base = path.split('/').pop();
+  const low = base.toLowerCase();
+  const m = low.match(/\.([a-z0-9]+)$/);
+  const ext = m ? m[1] : '';
+  const res = {
+    path, name: base, size: file.size, lang: 'unknown', fw: null,
+    note: '', via: '', binary: false, magic: null, weight: 1,
+    votes: {}, fws: [], _notes: []
+  };
+
+  let head = new Uint8Array(0);
+  try { head = new Uint8Array(await file.slice(0, 4096).arrayBuffer()); } catch (e) { /* ignore */ }
+  const magic = detectMagic(head);
+  if (magic) { res.magic = magic.fmt; res.binary = true; }
+  if (BIN_EXT.has(ext)) res.binary = true;
+
+  // 1) 文件名规则
+  for (const r of NAME_RULES) {
+    if (r.re.test(base)) addVote(res, r.lang, r.w, r.fw, r.note);
+  }
+  // 2) 扩展名
+  const extLang = EXT_MAP[ext];
+  if (extLang) addVote(res, extLang, 4, null, '.' + ext + ' 扩展名');
+
+  // 3) 二进制魔数
+  if (magic && !TEXT_EXT.has(ext)) {
+    if (magic.fmt === 'PE') {
+      let deep = '';
+      try {
+        const more = new Uint8Array(await file.slice(0, Math.min(file.size, 1024 * 1024)).arrayBuffer());
+        deep = latin1.decode(more);
+      } catch (e) { /* ignore */ }
+      if (deep.includes('BSJB') || deep.includes('mscoree.dll') || deep.includes('_CorExeMain')) {
+        addVote(res, 'csharp', 14, '.NET 程序集', 'PE + CLR 元数据');
+      } else {
+        addVote(res, 'cpp', 10, '原生 PE', 'Windows PE 机器码');
+      }
+    } else if (magic.fmt === 'ZIP') {
+      let deep = '';
+      try {
+        const more = new Uint8Array(await file.slice(0, Math.min(file.size, 2 * 1024 * 1024)).arrayBuffer());
+        deep = latin1.decode(more);
+      } catch (e) { /* ignore */ }
+      if (deep.includes('classes.dex') || /\.apk$/i.test(base)) {
+        addVote(res, 'kotlin', 14, 'Android APK', 'ZIP + classes.dex');
+        if (!res.note) res.note = 'Android 安装包';
+      } else if (deep.includes('META-INF/MANIFEST.MF')) {
+        addVote(res, 'java', 12, 'Java JAR', 'ZIP + JAR 清单');
+      } else {
+        addVote(res, 'json', 5, 'ZIP 归档', 'ZIP 容器');
+      }
+    } else if (magic.fmt === 'DEX') {
+      addVote(res, 'kotlin', 13, 'Dalvik 字节码', 'DEX 文件头');
+    } else if (magic.fmt === 'CLASS') {
+      addVote(res, 'java', 13, 'Java 字节码', 'Class 魔数 0xCAFEBABE');
+    } else if (magic.fmt === 'WASM') {
+      addVote(res, 'rust', 10, 'WebAssembly', 'WASM 模块头');
+    } else if (magic.fmt === 'ELF') {
+      const isAndroid = /\.so$/i.test(base) || low.includes('android');
+      addVote(res, 'cpp', 9, isAndroid ? 'Android NDK' : 'ELF 原生', 'ELF 文件头');
+    } else {
+      addVote(res, 'unknown', 6, null, magic.label);
+    }
+  }
+
+  // 4) 内容签名
+  const textual = !res.binary && (TEXT_EXT.has(ext) || (file.size > 0 && file.size < 400000 && looksTextual(head)));
+  if (textual && file.size > 0) {
+    let text = '';
+    try { text = await file.slice(0, 24000).text(); } catch (e) { /* ignore */ }
+    if (text) {
+      for (const s of SIGNATURES) {
+        if (s.re.test(text)) addVote(res, s.lang, s.w, s.fw || null, s.note);
+      }
+      // 代码行数粗估
+      res.lines = text.split('\n').length;
+      // 依赖/框架补充
+      if (/Electron|electron/.test(text) && /package\.json/.test(low)) res.fws.includes('Electron') || res.fws.push('Electron');
+    }
+  }
+
+  // 5) 收尾
+  let best = 'unknown', bestV = 0;
+  for (const k in res.votes) if (res.votes[k] > bestV) { bestV = res.votes[k]; best = k; }
+  res.lang = best;
+  res.fw = res.fws[0] || null;
+  res.note = res._notes.slice(0, 2).join(' · ') || (res.binary ? '二进制文件' : '');
+  res.via = res._notes.slice(0, 2).join(' + ') || '—';
+
+  const density = 1 + Math.min(1.6, Math.log10(file.size + 10) / 4);
+  const dataDiscount = (best === 'json' || best === 'xml' || best === 'unknown') ? 0.35 : 1;
+  res.weight = Math.max(0.5, bestV * density * dataDiscount);
+  return res;
+}
+
+async function pool(items, n, fn) {
+  const out = new Array(items.length);
+  let i = 0;
+  const workers = Array.from({ length: Math.min(n, Math.max(1, items.length)) }, async () => {
+    for (;;) {
+      const k = i++;
+      if (k >= items.length) return;
+      out[k] = await fn(items[k], k);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+/* ---------------- 工程聚合 ---------------- */
+function aggregate(results) {
+  const totals = new Map();
+  const fwMap = new Map();
+  let totalSize = 0, binaryCount = 0, textCount = 0, lineCount = 0;
+
+  for (const r of results) {
+    totalSize += r.size;
+    if (r.binary) binaryCount++; else textCount++;
+    if (r.lines) lineCount += r.lines;
+    totals.set(r.lang, (totals.get(r.lang) || 0) + r.weight);
+    for (const f of r.fws) fwMap.set(f, (fwMap.get(f) || 0) + r.weight);
+  }
+  const sum = Array.from(totals.values()).reduce((a, b) => a + b, 0) || 1;
+  const langs = Array.from(totals.entries())
+    .map(([key, w]) => ({ key, w, pct: (w / sum) * 100 }))
+    .sort((a, b) => b.w - a.w);
+
+  const plats = { windows: 0, android: 0, cross: 0, ios: 0, web: 0, other: 0 };
+  for (const l of langs) {
+    const p = langOf(l.key).plat;
+    plats[p] = (plats[p] || 0) + l.w;
+  }
+  for (const [f, w] of fwMap) {
+    if (/Android|Gradle|AndroidX/.test(f)) plats.android += w * 0.7;
+    if (/WPF|WinForms|WinUI|\.NET|Unity/.test(f)) plats.windows += w * 0.7;
+    if (/Flutter|Electron|Tauri|React Native/.test(f)) plats.cross += w * 0.7;
+    if (/iOS|macOS|Xcode|SwiftUI/.test(f)) plats.ios += w * 0.7;
+  }
+  const platsTotal = Object.values(plats).reduce((a, b) => a + b, 0) || 1;
+  const platforms = Object.entries(plats)
+    .map(([key, w]) => ({ key, w, pct: (w / platsTotal) * 100 }))
+    .sort((a, b) => b.w - a.w);
+  const top = platforms[0];
+  const second = platforms[1];
+  let verdict = { key: 'unknown', pct: 0 };
+  if (top && top.pct > 0.5) {
+    if (second && second.pct > 0 && top.pct / second.pct < 1.18 && top.pct < 70) {
+      verdict = { key: 'mixed', pct: top.pct };
+    } else {
+      verdict = { key: top.key, pct: top.pct };
+    }
+  }
+
+  const root = commonRoot(results.map(r => r.path));
+  return {
+    results, langs, fws: Array.from(fwMap.entries()).sort((a, b) => b[1] - a[1]),
+    platforms, verdict, totalSize, binaryCount, textCount, lineCount,
+    files: results.length, root,
+    primary: langs[0] || { key: 'unknown', pct: 0 }
+  };
+}
+
+function commonRoot(paths) {
+  if (!paths.length) return '';
+  const segs = paths.map(p => p.split('/'));
+  if (segs.some(s => s.length < 2)) return '';
+  const first = segs[0][0];
+  return segs.every(s => s[0] === first) ? first + '/' : '';
+}
+function shorten(path) {
+  const root = state.analysis ? state.analysis.root : '';
+  return root && path.startsWith(root) ? path.slice(root.length) : path;
+}
+
+/* ---------------- 平台文案 ---------------- */
+const VERDICT_META = {
+  windows: { label: 'Windows 桌面应用', sub: '.NET / WPF / Win32', color: '#9b6bff' },
+  android: { label: 'Android 应用', sub: 'Kotlin / Java / APK', color: '#2ee6a8' },
+  cross:   { label: '跨平台应用', sub: 'Flutter / Electron / Tauri', color: '#2dd4ff' },
+  ios:     { label: 'iOS 应用', sub: 'Swift / Objective-C', color: '#ff6b81' },
+  web:     { label: 'Web 应用', sub: 'HTML / JavaScript', color: '#ffc857' },
+  mixed:   { label: '混合工程', sub: '多平台代码共存', color: '#a8b6c9' },
+  other:   { label: '通用 / 服务端工程', sub: 'CLI · 库 · 后端', color: '#8ea3bd' },
+  unknown: { label: '未识别', sub: '需要更多源码文件', color: '#64748b' }
+};
+
+/* ============================================================
+   渲染：识别
+   ============================================================ */
+function renderSelection() {
+  const box = $('#selection');
+  if (!state.entries.length) { box.style.display = 'none'; return; }
+  const size = state.entries.reduce((a, e) => a + e.file.size, 0);
+  const root = commonRoot(state.entries.map(e => e.path));
+  box.style.display = 'block';
+  box.innerHTML =
+    '<div class="chips" style="align-items:center">' +
+      '<span class="chip acc"><i style="width:6px;height:6px;border-radius:50%;background:var(--cy);box-shadow:0 0 8px var(--cy)"></i>已载入 <b>' + state.entries.length + '</b> 个文件 · ' + fmtBytes(size) + '</span>' +
+      (root ? '<span class="chip">根目录 <b>' + esc(root.replace(/\/$/, '')) + '</b></span>' : '') +
+      '<span class="chip" id="analysingTx">解析中…</span>' +
+      '<button class="btn sm" id="clearFiles" style="margin-left:auto">清空</button>' +
+    '</div>';
+  const c = $('#clearFiles');
+  if (c) c.onclick = () => {
+    state.entries = []; state.analysis = null; state.bin = null; state.binEntry = null; state.out = null;
+    $('#selection').style.display = 'none';
+    $('#detectResult').style.display = 'none';
+    $('#detectEmpty').style.display = 'block';
+    $('#convertEmpty').style.display = 'block';
+    $('#convertResult').style.display = 'none';
+    $('#binEmpty').style.display = 'block';
+    $('#binResult').style.display = 'none';
+    $('#reconOut').style.display = 'none';
+    $('#convertOut').style.display = 'none';
+    $('#convertLog').style.display = 'none';
+    $$('#pipeline .step').forEach(s => s.className = 'step');
+    if (state.tab === 'convert') switchView('detect');
+    toast('已清空项目');
+  };
+}
+
+function renderDetect() {
+  const a = state.analysis;
+  if (!a) return;
+  $('#detectEmpty').style.display = 'none';
+  $('#detectResult').style.display = 'block';
+
+  const p = langOf(a.primary.key);
+  const v = VERDICT_META[a.verdict.key] || VERDICT_META.unknown;
+  const pctTxt = a.primary.pct.toFixed(0) + '%';
+  const fwTop = a.fws.slice(0, 3);
+
+  $('#summary').innerHTML =
+    '<div class="scard hero-card">' +
+      '<div class="k">Primary Language · 主语言</div>' +
+      '<div class="v"><span class="lang-dot" style="background:' + p.c + ';color:' + p.c + '"></span>' + esc(p.n) + ' <small>' + esc(p.hint) + '</small></div>' +
+      '<div class="conf"><i style="width:' + Math.min(100, a.primary.pct) + '%;background:linear-gradient(90deg,' + p.c + ',#9b6bff)"></i></div>' +
+      '<div class="s">置信度 ' + pctTxt + ' · ' + a.langs.length + ' 种语言特征</div>' +
+    '</div>' +
+    '<div class="scard">' +
+      '<div class="k">Platform · 平台判定</div>' +
+      '<div class="v" style="font-size:18px">' + esc(v.label) + '</div>' +
+      '<div class="s" style="color:' + v.color + '">' + esc(v.sub) + '</div>' +
+      '<div class="s">匹配度 ' + a.verdict.pct.toFixed(0) + '%</div>' +
+    '</div>' +
+    '<div class="scard">' +
+      '<div class="k">Project · 工程规模</div>' +
+      '<div class="v">' + a.files + ' <small>个文件</small></div>' +
+      '<div class="s">' + fmtBytes(a.totalSize) + ' · 约 ' + (a.lineCount || 0).toLocaleString() + ' 行代码</div>' +
+      '<div class="s">' + a.textCount + ' 文本 / ' + a.binaryCount + ' 二进制</div>' +
+    '</div>' +
+    '<div class="scard">' +
+      '<div class="k">Frameworks · 框架</div>' +
+      '<div class="v" style="font-size:16px;display:block">' + (fwTop.length ? esc(fwTop[0][0]) : '未检测到') + '</div>' +
+      '<div class="s">' + (fwTop.length > 1 ? fwTop.slice(1).map(x => esc(x[0])).join(' · ') : '无额外框架特征') + '</div>' +
+    '</div>';
+
+  const shown = a.langs.filter(l => l.key !== 'unknown' || a.langs.length === 1).slice(0, 7);
+  $('#distHint').textContent = '按文件数量与类型加权 · ' + a.files + ' files';
+  $('#dist').innerHTML = shown.map(l => {
+    const m = langOf(l.key);
+    return '<div class="dist-row">' +
+      '<div class="dist-name"><i style="background:' + m.c + ';color:' + m.c + '"></i>' + esc(m.n) + '</div>' +
+      '<div class="bar"><i style="width:' + Math.max(2, l.pct) + '%;background:linear-gradient(90deg,' + m.c + 'cc,' + m.c + ')"></i></div>' +
+      '<div class="dist-pct">' + l.pct.toFixed(1) + '%</div>' +
+    '</div>';
+  }).join('');
+
+  $('#fwChips').innerHTML = a.fws.length
+    ? a.fws.slice(0, 12).map(([f]) => '<span class="chip acc"><b>' + esc(f) + '</b></span>').join('')
+    : '<span class="chip">未匹配到已知框架签名，可能是纯标准库工程</span>';
+
+  const sorted = a.results.slice().sort((x, y) => y.size - x.size).slice(0, 300);
+  $('#fileHint').textContent = '显示 ' + sorted.length + ' / ' + a.files + ' 个文件（按体积排序）';
+  $('#fileBody').innerHTML = sorted.map(r => {
+    const m = langOf(r.lang);
+    const tag = r.lang === 'unknown' && r.magic
+      ? '<span class="tag" style="color:#8ea3bd"><i></i>' + esc(r.magic) + '</span>'
+      : '<span class="tag" style="color:' + m.c + '"><i></i>' + esc(m.n) + '</span>';
+    return '<tr>' +
+      '<td class="fname" title="' + esc(r.path) + '">' + esc(shorten(r.path)) + '</td>' +
+      '<td>' + tag + '</td>' +
+      '<td class="fnote" title="' + esc(r.via) + '">' + esc(r.via) + '</td>' +
+      '<td class="fsize">' + fmtBytes(r.size) + '</td>' +
+    '</tr>';
+  }).join('');
+
+  const sel = $('#analysingTx');
+  if (sel) sel.remove();
+  const appInput = $('#appName');
+  if (appInput && !state.appNameTouched) {
+    appInput.value = pascal(a.root.replace(/\/$/, '') || 'MyForgeApp');
+    state.appName = appInput.value;
+  }
+  if (state.tab === 'convert') renderConvertSrc();
+}
+
+async function runAnalysis() {
+  try {
+    const results = await pool(state.entries, 8, analyzeFile);
+    state.analysis = aggregate(results);
+    renderDetect();
+    pickBinary();
+    if (state.tab === 'convert') renderConvertSrc();
+    if (state.tab === 'binary' && state.binEntry) runBinary(state.binEntry, true);
+  } catch (err) {
+    console.error(err);
+    toast('解析失败：' + err.message);
+  }
+}
+
+/* ============================================================
+   渲染：转换
+   ============================================================ */
+const TARGETS = [
+  { id: 'android', name: 'Android 手机应用', tech: 'Kotlin · Jetpack Compose', desc: '生成可导入 Android Studio 的 Gradle 工程', icon: 'phone' },
+  { id: 'windows', name: 'Windows 桌面应用', tech: 'C# · .NET 8 · WPF', desc: '生成可直接 dotnet run 的桌面工程', icon: 'monitor' },
+  { id: 'flutter', name: '跨平台应用', tech: 'Dart · Flutter', desc: '一次生成，同时输出桌面与移动端', icon: 'layers' }
+];
+const ICONS = {
+  phone: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg>',
+  monitor: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><rect x="2.5" y="4" width="19" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
+  layers: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg>'
+};
+
+function recommendTarget() {
+  const k = state.analysis ? state.analysis.verdict.key : 'unknown';
+  if (k === 'android') return 'windows';
+  if (k === 'windows') return 'android';
+  if (k === 'cross') return 'flutter';
+  return 'android';
+}
+const targetAvailable = (id) => {
+  const k = state.analysis ? state.analysis.verdict.key : '';
+  if (k === 'ios') return id !== 'windows';
+  return true;
+};
+
+function renderConvertSrc() {
+  const a = state.analysis;
+  if (!a) return;
+  $('#convertEmpty').style.display = 'none';
+  $('#convertResult').style.display = 'block';
+
+  const p = langOf(a.primary.key);
+  const v = VERDICT_META[a.verdict.key] || VERDICT_META.unknown;
+  $('#srcHint').textContent = a.files + ' files · ' + fmtBytes(a.totalSize);
+  $('#srcSummary').innerHTML =
+    '<div class="chips">' +
+      '<span class="chip"><i style="width:8px;height:8px;border-radius:2px;background:' + p.c + ';box-shadow:0 0 8px ' + p.c + '"></i><b>' + esc(p.n) + '</b> ' + a.primary.pct.toFixed(0) + '%</span>' +
+      '<span class="chip">平台 <b>' + esc(v.label) + '</b></span>' +
+      a.fws.slice(0, 4).map(([f]) => '<span class="chip">' + esc(f) + '</span>').join('') +
+      '<span class="chip">' + a.files + ' 文件 · ' + fmtBytes(a.totalSize) + '</span>' +
+    '</div>';
+
+  const rec = recommendTarget();
+  if (!state.targetTouched) state.target = rec;
+
+  $('#targets').innerHTML = TARGETS.map(t => {
+    const on = state.target === t.id ? ' on' : '';
+    const dis = targetAvailable(t.id) ? '' : ' disabled';
+    return '<div class="target' + on + dis + '" data-target="' + t.id + '">' +
+      (t.id === rec ? '<span class="rec">推荐</span>' : '') +
+      '<div class="ic">' + ICONS[t.icon] + '</div>' +
+      '<h4>' + t.name + '</h4>' +
+      '<p>' + t.tech + '<br>' + t.desc + '</p>' +
+    '</div>';
+  }).join('');
+  $$('#targets .target').forEach(el => {
+    el.onclick = () => { state.target = el.dataset.target; state.targetTouched = true; renderConvertSrc(); };
+  });
+}
+
+async function runConvert() {
+  if (state.running || !state.analysis) return;
+  state.running = true;
+  const a = state.analysis;
+  const btn = $('#runConvert');
+  btn.disabled = true;
+  const steps = $$('#pipeline .step');
+  steps.forEach(s => s.className = 'step');
+  const log = $('#convertLog');
+  log.style.display = 'block';
+  log.innerHTML = '';
+  $('#convertOut').style.display = 'none';
+  const tgt = TARGETS.find(t => t.id === state.target);
+  const appName = ($('#appName').value.trim() || 'MyForgeApp');
+  const p = langOf(a.primary.key);
+  const v = VERDICT_META[a.verdict.key] || VERDICT_META.unknown;
+
+  const write = (html) => { const d = document.createElement('div'); d.innerHTML = html; log.appendChild(d); log.scrollTop = log.scrollHeight; };
+
+  write('> polyforge transpile --from "' + esc(v.label) + '" --to ' + state.target);
+  await sleep(340);
+  steps[0].className = 'step on';
+  write('> 读取 <b>' + a.files + '</b> 个文件（' + fmtBytes(a.totalSize) + '）· 主语言 <b>' + esc(p.n) + '</b>');
+  await sleep(520);
+  steps[0].className = 'step done'; steps[1].className = 'step on';
+  const uiFiles = a.results.filter(r => /xaml|xml|html/.test(r.lang)).length;
+  write('> 抽取 UI 结构：' + uiFiles + ' 个布局文件 · 框架 ' + (a.fws[0] ? esc(a.fws[0][0]) : '标准库'));
+  await sleep(480);
+  steps[1].className = 'step done'; steps[2].className = 'step on';
+  write('> 映射 API：' + a.primary.key + ' → ' + tgt.tech.split('·')[0].trim());
+  await sleep(500);
+  steps[2].className = 'step done'; steps[3].className = 'step on';
+  write('> 生成目标工程骨架…');
+  await sleep(420);
+
+  const out = buildScaffold(state.target, appName, a);
+  state.out = out;
+  state.activeFile = 0;
+  renderConvertOut();
+  steps[3].className = 'step done';
+  write('✓ <span class="ok">完成</span> · 输出 <b>' + out.files.length + '</b> 个文件 · ' + esc(tgt.tech));
+  btn.disabled = false;
+  state.running = false;
+  toast('转换完成：' + out.files.length + ' 个文件');
+
+  const panel = $('#convertOut');
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function renderConvertOut() {
+  const out = state.out;
+  if (!out) return;
+  $('#convertOut').style.display = 'block';
+  const files = out.files;
+
+  const groups = {};
+  for (const f of files) {
+    const dir = f.path.includes('/') ? f.path.slice(0, f.path.lastIndexOf('/')) : '/';
+    (groups[dir] = groups[dir] || []).push(f);
+  }
+  let html = '';
+  Object.keys(groups).sort().forEach(dir => {
+    html += '<div class="grp">' + esc(dir === '/' ? 'root' : dir) + '</div>';
+    groups[dir].forEach(f => {
+      const idx = files.indexOf(f);
+      html += '<div class="fitem' + (idx === state.activeFile ? ' on' : '') + '" data-i="' + idx + '">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5"/></svg>' +
+        esc(f.path.split('/').pop()) + '</div>';
+    });
+  });
+  $('#tree').innerHTML = html;
+  $$('#tree .fitem').forEach(el => {
+    el.onclick = () => { state.activeFile = Number(el.dataset.i); renderConvertOut(); };
+  });
+  showCode(files[state.activeFile]);
+}
+
+function showCode(file) {
+  if (!file) return;
+  $('#codeFile').textContent = file.path;
+  $('#codePre').innerHTML = highlight(file.text);
+  $('#codeFile').dataset.idx = state.out.files.indexOf(file);
+}
+
+function highlight(code) {
+  const s = esc(code);
+  const re = /(\/\/[^\n]*|&lt;!--[\s\S]*?--&gt;|&quot;(?:(?!&quot;)[\s\S])*?&quot;|&#39;(?:(?!&#39;)[\s\S])*?&#39;|\b(?:fun|class|object|interface|val|var|import|package|return|if|else|when|for|while|private|public|protected|override|open|lateinit|void|string|int|bool|boolean|using|namespace|new|static|async|await|final|const|true|false|null|String|Int|Boolean|Widget|Scaffold|Text|Card|Column|Row|Activity|Composable|Modifier|setContent|ColumnDefinition|GridView|Window|Application|Bundle|ThemeData|MaterialApp|StatelessWidget|StatefulWidget|required)\b|\b\d+(?:\.\d+)?\b)/g;
+  return s.replace(re, (m) => {
+    if (m.startsWith('//') || m.startsWith('&lt;!--')) return '<span class="c">' + m + '</span>';
+    if (m.startsWith('&quot;') || m.startsWith('&#39;')) return '<span class="s">' + m + '</span>';
+    if (/^\d/.test(m)) return '<span class="n">' + m + '</span>';
+    return '<span class="k">' + m + '</span>';
+  });
+}
+
+function pascal(s) {
+  return String(s || '').replace(/[^A-Za-z0-9]+/g, ' ').trim().split(/\s+/)
+    .map(w => w ? w[0].toUpperCase() + w.slice(1) : '').join('').replace(/^[^A-Za-z]+/, '') || 'MyForgeApp';
+}
+function snake(s) {
+  return pascal(s).replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+}
+function slugPkg(s) {
+  return (snake(s).replace(/[^a-z0-9]/g, '') || 'app');
+}
+
+/* ---------------- 工程骨架生成 ---------------- */
+function buildScaffold(target, appName, a) {
+  const app = pascal(appName) || 'MyForgeApp';
+  const pkg = 'com.polyforge.' + slugPkg(app);
+  const srcLang = langOf(a.primary.key).n;
+  const v = VERDICT_META[a.verdict.key] || VERDICT_META.unknown;
+
+  const plan = buildPlan(target, a, v);
+  let files = [];
+
+  if (target === 'android') {
+    const p = pkg.replace(/\./g, '/');
+    files = [
+      { path: 'settings.gradle.kts', text: SETTINGS_GRADLE(app) },
+      { path: 'build.gradle.kts', text: ROOT_GRADLE },
+      { path: 'app/build.gradle.kts', text: APP_GRADLE(pkg, app) },
+      { path: 'app/src/main/AndroidManifest.xml', text: MANIFEST_ANDROID },
+      { path: 'app/src/main/res/values/strings.xml', text: STRINGS_XML(app) },
+      { path: 'app/src/main/java/' + p + '/MainActivity.kt', text: MAIN_KT(pkg, app) },
+      { path: 'app/src/main/java/' + p + '/ui/HomeScreen.kt', text: HOME_KT(pkg, app, a) },
+      { path: 'MIGRATION.md', text: plan }
+    ];
+  } else if (target === 'windows') {
+    files = [
+      { path: app + '/' + app + '.csproj', text: CSPROJ(app) },
+      { path: app + '/App.xaml', text: APP_XAML(app) },
+      { path: app + '/App.xaml.cs', text: APP_XAML_CS(app) },
+      { path: app + '/MainWindow.xaml', text: MAIN_WINDOW_XAML(app, a) },
+      { path: app + '/MainWindow.xaml.cs', text: MAIN_WINDOW_CS(app, a) },
+      { path: app + '/Services/AppService.cs', text: SERVICE_CS(app, a) },
+      { path: 'README.md', text: plan }
+    ];
+  } else {
+    files = [
+      { path: 'pubspec.yaml', text: PUBSPEC(app) },
+      { path: 'lib/main.dart', text: MAIN_DART(app) },
+      { path: 'lib/src/home_page.dart', text: HOME_DART(app, a) },
+      { path: 'lib/src/models.dart', text: MODELS_DART(a) },
+      { path: 'README.md', text: plan }
+    ];
+  }
+
+  return { files, app, pkg, target, srcLang, verdict: v, plan };
+}
+
+function buildPlan(target, a, v) {
+  const rec = [];
+  const fws = a.fws.map(x => x[0]);
+  const has = (re) => fws.some(f => re.test(f));
+  if (target === 'android') {
+    rec.push('| 源结构 | Android 目标 | 说明 |', '| --- | --- | --- |');
+    rec.push('| Windows `Window` / `Page` | `Scaffold` + `NavHost` | 单窗口映射为可导航页面容器 |');
+    rec.push('| `Grid` / `StackPanel` | `Column` / `Row` | 布局方向与间距映射到 Compose 修饰符 |');
+    rec.push('| `Button` / `TextBlock` | `Button` / `Text` | Material 3 等价组件 |');
+    rec.push('| `ListView` / `DataGrid` | `LazyColumn` | 虚拟化列表 |');
+    if (has(/\.NET|WPF|WinForms/)) rec.push('| 事件处理 `Click` | `onClick` lambda | 回调改为组合式状态 |');
+  } else if (target === 'windows') {
+    rec.push('| 源结构 | Windows 目标 | 说明 |', '| --- | --- | --- |');
+    rec.push('| `Activity` / `Fragment` | `Window` / `Page` | 转为 WPF 导航窗口 |');
+    rec.push('| `LinearLayout` / `ConstraintLayout` | `StackPanel` / `Grid` | 布局容器映射 |');
+    rec.push('| `RecyclerView` | `ListView` + `ItemTemplate` | 数据模板 + 虚拟化 |');
+    rec.push('| `MaterialButton` | `Button` | 由 Material 主题统一样式 |');
+    if (has(/Compose/)) rec.push('| `@Composable` | `UserControl` | 组合函数 → 可复用控件 |');
+  } else {
+    rec.push('| 源结构 | Flutter 目标 | 说明 |', '| --- | --- | --- |');
+    rec.push('| 窗口 / 页面 | `MaterialApp` + `Navigator` | 单入口多页面 |');
+    rec.push('| 布局容器 | `Column` / `Row` / `Stack` | 一套代码双端渲染 |');
+    rec.push('| 列表控件 | `ListView.builder` | 懒加载列表 |');
+    rec.push('| 主题与颜色 | `ThemeData` | 统一设计令牌 |');
+  }
+  return [
+    '# ' + pascal(a.root.replace(/\/$/, '') || 'App') + ' — 迁移清单',
+    '',
+    '> 由 POLYFORGE 生成。源工程：**' + esc(a.files + ' 个文件 / ' + fmtBytes(a.totalSize)) + '**，主语言 **' + esc(langOf(a.primary.key).n) + '**，平台判定 **' + esc(v.label) + '**。',
+    '',
+    '## 检测结果',
+    '',
+    '| 项目 | 值 |',
+    '| --- | --- |',
+    '| 主语言 | ' + esc(langOf(a.primary.key).n) + ' (' + a.primary.pct.toFixed(0) + '%) |',
+    '| 平台 | ' + esc(v.label) + ' |',
+    '| 框架 | ' + (fws.length ? esc(fws.slice(0, 5).join(', ')) : '未匹配') + ' |',
+    '| 文件 | ' + a.files + ' (' + fmtBytes(a.totalSize) + ') |',
+    '',
+    '## 结构映射',
+    '',
+    ...rec,
+    '',
+    '## 实施步骤',
+    '',
+    '1. 用生成的工程骨架替换目标平台空项目。',
+    '2. 按上表逐个迁移布局与控件，先静态界面后交互。',
+    '3. 抽取业务逻辑为独立 service 层，避免与 UI 耦合。',
+    '4. 替换平台相关 API（文件系统、注册表、通知、权限）。',
+    '5. 补齐资源（图标、字体、本地化字符串）与签名配置。',
+    ''
+  ].join('\n');
+}
+
+/* --- Android 模板 --- */
+const SETTINGS_GRADLE = (app) => `pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "${app}"
+include(":app")
+`;
+const ROOT_GRADLE = `plugins {
+    id("com.android.application") version "8.5.2" apply false
+    id("org.jetbrains.kotlin.android") version "2.0.20" apply false
+}
+`;
+const APP_GRADLE = (pkg, app) => `plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+android {
+    namespace = "${pkg}"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "${pkg}"
+        minSdk = 24
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0"
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = "17" }
+    buildFeatures { compose = true }
+    composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
+}
+
+dependencies {
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.activity:activity-compose:1.9.0")
+    implementation("androidx.compose.ui:ui:1.6.8")
+    implementation("androidx.compose.ui:ui-tooling-preview:1.6.8")
+    implementation("androidx.compose.material3:material3:1.2.1")
+    debugImplementation("androidx.compose.ui:ui-tooling:1.6.8")
+}
+`;
+const MANIFEST_ANDROID = `<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:icon="@android:drawable/sym_def_app_icon"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Material3.DayNight.NoActionBar">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>
+`;
+const STRINGS_XML = (app) => `<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">${app}</string>
+    <string name="home_title">${app}</string>
+    <string name="empty_hint">暂无数据，等待迁移业务逻辑</string>
+</resources>
+`;
+const MAIN_KT = (pkg, app) => `package ${pkg}
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.material3.MaterialTheme
+import ${pkg}.ui.HomeScreen
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            MaterialTheme {
+                HomeScreen()
+            }
+        }
+    }
+}
+`;
+const HOME_KT = (pkg, app, a) => `package ${pkg}.ui
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+
+data class ListItem(val id: String, val title: String, val detail: String)
+
+/**
+ * 由 ${langOf(a.primary.key).n} 工程迁移而来。
+ * 检测到的框架：${a.fws.slice(0, 3).map(f => f[0]).join(' / ') || '无'}
+ * TODO: 将 sampleItems() 替换为真实的业务数据源。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HomeScreen(items: List<ListItem> = sampleItems()) {
+    Scaffold(
+        topBar = { TopAppBar(title = { Text("${app}") }) }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(items) { item ->
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(item.title, style = MaterialTheme.typography.titleMedium)
+                        Text(item.detail, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun sampleItems(): List<ListItem> = listOf(
+    ListItem("1", "已迁移的主界面", "对应源工程的窗口 / 页面"),
+    ListItem("2", "待补充的业务逻辑", "TODO: 接入 service 层"),
+    ListItem("3", "资源与权限", "TODO: 替换图标、签名与权限声明")
+)
+`;
+
+/* --- Windows 模板 --- */
+const CSPROJ = (app) => `<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>${app}</AssemblyName>
+    <RootNamespace>${app}</RootNamespace>
+  </PropertyGroup>
+
+</Project>
+`;
+const APP_XAML = (app) => `<Application x:Class="${app}.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <SolidColorBrush x:Key="AccentBrush" Color="#2DD4FF" />
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#0B1523" />
+    </Application.Resources>
+</Application>
+`;
+const APP_XAML_CS = (app) => `using System.Windows;
+
+namespace ${app};
+
+public partial class App : Application
+{
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        base.OnStartup(e);
+        // TODO: 迁移源工程的启动流程（依赖注入、配置加载、单实例检查）
+    }
+}
+`;
+const MAIN_WINDOW_XAML = (app, a) => `<Window x:Class="${app}.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="${app}" Height="760" Width="1180"
+        Background="#04060B" Foreground="#E8F2FF"
+        WindowStartupLocation="CenterScreen">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,18">
+            <TextBlock Text="${app}" FontSize="26" FontWeight="Bold"
+                       Foreground="{StaticResource AccentBrush}" />
+            <TextBlock Text="  ·  Windows" Opacity="0.4" VerticalAlignment="Bottom" Margin="6,0,0,4" />
+        </StackPanel>
+
+        <ListView Grid.Row="1" x:Name="ItemsList" Background="Transparent" BorderThickness="0">
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Border Background="{StaticResource SurfaceBrush}" CornerRadius="10"
+                            Padding="16" Margin="0,0,0,10">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding Detail}" FontSize="12" Opacity="0.6" Margin="0,4,0,0" />
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </Grid>
+</Window>
+`;
+const MAIN_WINDOW_CS = (app, a) => `using System.Collections.Generic;
+using System.Windows;
+
+namespace ${app};
+
+public partial class MainWindow : Window
+{
+    public List<Item> Items { get; } = new()
+    {
+        new Item("已迁移的主界面", "对应源工程的 Activity / 页面"),
+        new Item("待补充的业务逻辑", "TODO: 接入服务层"),
+        new Item("资源与权限", "TODO: 替换图标与安装配置")
+    };
+
+    public MainWindow()
+    {
+        InitializeComponent();
+        ItemsList.ItemsSource = Items;
+    }
+
+    // 源工程检测到的框架：${a.fws.slice(0, 3).map(f => f[0]).join(' / ') || '无'}
+    public record Item(string Title, string Detail);
+}
+`;
+const SERVICE_CS = (app, a) => `using System;
+using System.Threading.Tasks;
+
+namespace ${app}.Services;
+
+/// <summary>
+/// 业务服务骨架：迁移自 ${langOf(a.primary.key).n} 工程。
+/// TODO: 将源工程的网络 / 存储 / 设备调用迁移到此处。
+/// </summary>
+public class AppService
+{
+    public Task<string[]> LoadAsync()
+    {
+        // 占位数据，替换为真实数据源
+        return Task.FromResult(new[]
+        {
+            "已迁移的主界面",
+            "待补充的业务逻辑",
+            "资源与权限"
+        });
+    }
+}
+`;
+
+/* --- Flutter 模板 --- */
+const PUBSPEC = (app) => `name: ${snake(app)}
+description: Migrated cross-platform app generated by POLYFORGE.
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+`;
+const MAIN_DART = (app) => `import 'package:flutter/material.dart';
+import 'src/home_page.dart';
+
+void main() {
+  runApp(const ${app}App());
+}
+
+class ${app}App extends StatelessWidget {
+  const ${app}App({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: '${app}',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        colorSchemeSeed: const Color(0xFF2DD4FF),
+        scaffoldBackgroundColor: const Color(0xFF04060B),
+      ),
+      home: const HomePage(),
+    );
+  }
+}
+`;
+const HOME_DART = (app, a) => `import 'package:flutter/material.dart';
+import 'models.dart';
+
+/// 迁移自 ${langOf(a.primary.key).n} 工程。
+/// 检测到的框架：${a.fws.slice(0, 3).map(f => f[0]).join(' / ') || '无'}
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  final List<Item> _items = sampleItems();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('${app}')),
+      body: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: _items.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final item = _items[index];
+          return Card(
+            child: ListTile(
+              title: Text(item.title),
+              subtitle: Text(item.detail),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => setState(() {}),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+`;
+const MODELS_DART = (a) => `/// 数据模型骨架：由 ${langOf(a.primary.key).n} 工程迁移。
+class Item {
+  const Item(this.title, this.detail);
+
+  final String title;
+  final String detail;
+}
+
+List<Item> sampleItems() => const [
+      Item('已迁移的主界面', '对应源工程的窗口 / 页面'),
+      Item('待补充的业务逻辑', 'TODO: 接入真实数据源'),
+      Item('资源与权限', 'TODO: 替换图标与平台配置'),
+    ];
+`;
+
+/* ============================================================
+   二进制分析
+   ============================================================ */
+function pickBinary() {
+  if (!state.entries.length) { state.binEntry = null; return; }
+  const cands = state.analysis ? state.analysis.results.filter(r => r.binary || BIN_EXT.has((r.name.split('.').pop() || '').toLowerCase())) : [];
+  if (cands.length) {
+    const ranked = cands.slice().sort((x, y) => y.weight - x.weight);
+    state.binEntry = state.entries.find(e => e.path === ranked[0].path) || null;
+  } else {
+    state.binEntry = null;
+  }
+  if (state.tab === 'binary' && state.binEntry) runBinary(state.binEntry);
+}
+
+function shannon(u8) {
+  if (!u8.length) return 0;
+  const freq = new Array(256).fill(0);
+  const n = Math.min(u8.length, 262144);
+  for (let i = 0; i < n; i++) freq[u8[i]]++;
+  let h = 0;
+  for (let i = 0; i < 256; i++) {
+    if (!freq[i]) continue;
+    const p = freq[i] / n;
+    h -= p * Math.log2(p);
+  }
+  return h;
+}
+
+function extractStrings(u8) {
+  const out = [];
+  let cur = '';
+  const push = () => { if (cur.length >= 4) out.push(cur); cur = ''; };
+  for (let i = 0; i < u8.length; i++) {
+    const b = u8[i];
+    if (b >= 0x20 && b <= 0x7E) cur += String.fromCharCode(b);
+    else push();
+    if (out.length > 4000) break;
+  }
+  push();
+  // UTF-16LE
+  let cur16 = '';
+  for (let i = 0; i + 1 < u8.length; i += 2) {
+    const lo = u8[i], hi = u8[i + 1];
+    if (hi === 0 && lo >= 0x20 && lo <= 0x7E) cur16 += String.fromCharCode(lo);
+    else { if (cur16.length >= 4) out.push(cur16); cur16 = ''; }
+    if (out.length > 6000) break;
+  }
+  if (cur16.length >= 4) out.push(cur16);
+  return out;
+}
+
+function categorize(s) {
+  if (/^https?:\/\//i.test(s) || /^[\w.-]+\.(com|io|net|org|cn|app|dev)(\/|$)/i.test(s)) return 'url';
+  if (/^HKEY_|SOFTWARE\\|SYSTEM\\CurrentControlSet/i.test(s)) return 'reg';
+  if (/^[A-Za-z]:[\\/]|^\/(usr|etc|opt|home|system|data|vendor|proc)\//.test(s) || /\.(dll|exe|so|dylib|json|xml|png|jar|dex|config|db)$/i.test(s)) return 'path';
+  if (/(error|fail|invalid|denied|unable|missing|not found|错误|失败|无效|无法)/i.test(s)) return 'error';
+  if (/^[A-Z][A-Za-z0-9_]{2,}(W|A)?$/.test(s) || /(Create|Open|Read|Write|Load|Get|Set|Draw|Query|Connect|Reg)[A-Z]\w+/.test(s)) return 'api';
+  return 'other';
+}
+
+async function runBinary(entry, silent) {
+  const file = entry.file;
+  const size = file.size;
+  const cap = Math.min(size, 8 * 1024 * 1024);
+  let buf = new Uint8Array(0);
+  try { buf = new Uint8Array(await file.slice(0, cap).arrayBuffer()); } catch (e) { }
+  const magic = detectMagic(buf);
+  const latin = latin1.decode(buf.subarray(0, Math.min(buf.length, 2 * 1024 * 1024)));
+  const isDotNet = latin.includes('BSJB') || latin.includes('mscoree.dll') || latin.includes('_CorExeMain');
+  const isApk = magic && magic.fmt === 'ZIP' && latin.includes('classes.dex');
+  const entropy = shannon(buf);
+  const strings = extractStrings(buf);
+
+  let type = magic ? magic.label : '未知容器';
+  let langKey = 'unknown';
+  let note = '';
+  if (magic) {
+    if (magic.fmt === 'PE' && isDotNet) { type = 'PE · .NET 程序集'; langKey = 'csharp'; note = 'CLR 元数据 / IL'; }
+    else if (magic.fmt === 'PE') { type = 'PE · 原生可执行'; langKey = 'cpp'; note = 'x86 / x64 机器码'; }
+    else if (magic.fmt === 'ZIP' && isApk) { type = 'APK · Android 安装包'; langKey = 'kotlin'; note = 'ZIP + classes.dex'; }
+    else if (magic.fmt === 'ZIP') { type = 'ZIP 容器'; langKey = 'java'; note = '压缩归档'; }
+    else if (magic.fmt === 'DEX') { type = 'DEX · Dalvik 字节码'; langKey = 'kotlin'; note = 'Android 可执行'; }
+    else if (magic.fmt === 'CLASS') { type = 'Java Class 字节码'; langKey = 'java'; note = 'JVM 指令'; }
+    else if (magic.fmt === 'ELF') { type = 'ELF · Linux/Android'; langKey = 'c'; note = '原生共享库 / 可执行'; }
+    else if (magic.fmt === 'WASM') { type = 'WebAssembly 模块'; langKey = 'rust'; note = 'WASM 指令集'; }
+    else if (magic.fmt === 'MACHO') { type = 'Mach-O · Apple'; langKey = 'objc'; note = 'macOS / iOS'; }
+    else if (magic.fmt === 'AR') { type = '静态库归档'; langKey = 'c'; note = '.a / .lib'; }
+  } else if (!isApk) {
+    // 无魔数：按内容猜
+    if (/\b(import|package)\b/.test(latin) && /\{/.test(latin)) { type = '文本源代码'; langKey = 'unknown'; }
+  }
+
+  const urls = strings.filter(s => categorize(s) === 'url').slice(0, 24);
+  const paths = strings.filter(s => categorize(s) === 'path').slice(0, 24);
+  const errors = strings.filter(s => categorize(s) === 'error').slice(0, 24);
+  const apis = strings.filter(s => categorize(s) === 'api').slice(0, 24);
+
+  state.bin = {
+    path: entry.path, name: entry.path.split('/').pop(), size, type, langKey, note,
+    magic, entropy, strings, urls, paths, errors, apis, isDotNet, isApk
+  };
+
+  renderBinary();
+  if (!silent) toast('已分析 ' + entry.path.split('/').pop());
+}
+
+function renderBinary() {
+  const b = state.bin;
+  if (!b) return;
+  $('#binEmpty').style.display = 'none';
+  $('#binResult').style.display = 'block';
+  const m = langOf(b.langKey);
+
+  $('#binFileLine').innerHTML =
+    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2dd4ff" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12h8M12 8v8"/></svg>' +
+    '<span class="f">' + esc(b.path) + '</span>' +
+    '<span class="s">' + fmtBytes(b.size) + ' · 已采样 ' + fmtBytes(Math.min(b.size, 8 * 1024 * 1024)) + '</span>';
+
+  $('#binMeta').innerHTML =
+    '<div class="meta"><div class="k">Format · 格式</div><div class="v" style="color:var(--cy)">' + esc(b.type) + '</div></div>' +
+    '<div class="meta"><div class="k">Likely Source · 推断语言</div><div class="v" style="color:' + m.c + '">' + esc(m.n) + '</div></div>' +
+    '<div class="meta"><div class="k">Entropy · 信息熵</div><div class="v">' + b.entropy.toFixed(2) + ' <span style="color:var(--dim2);font-size:11px">/ 8.00</span></div></div>' +
+    '<div class="meta"><div class="k">Strings · 字符串</div><div class="v">' + b.strings.length + ' <span style="color:var(--dim2);font-size:11px">条</span></div></div>';
+
+  const counts = {
+    all: b.strings.length,
+    url: b.urls.length,
+    path: b.paths.length,
+    api: b.apis.length,
+    error: b.errors.length
+  };
+  const tabs = [
+    ['all', '全部'], ['url', 'URL / 域名'], ['path', '路径'], ['api', '系统 API'], ['error', '错误信息']
+  ];
+  $('#strFilters').innerHTML = tabs.map(([k, label]) =>
+    '<span class="chip' + (state.strFilter === k ? ' acc' : '') + '" data-f="' + k + '" style="cursor:pointer">' + label + ' <b>' + (counts[k] || 0) + '</b></span>'
+  ).join('');
+  $$('#strFilters .chip').forEach(el => {
+    el.onclick = () => { state.strFilter = el.dataset.f; renderBinary(); };
+  });
+
+  let list;
+  if (state.strFilter === 'all') list = b.strings;
+  else if (state.strFilter === 'url') list = b.urls;
+  else if (state.strFilter === 'path') list = b.paths;
+  else if (state.strFilter === 'api') list = b.apis;
+  else list = b.errors;
+
+  $('#strHint').textContent = list.length + ' / ' + b.strings.length + ' 条可读字符串';
+  const shown = list.slice(0, 180);
+  $('#strList').innerHTML = shown.length
+    ? shown.map((s, i) => {
+      const cat = categorize(s);
+      const hl = cat === 'url' || cat === 'error' ? ' hl' : '';
+      return '<div class="str' + hl + '"><span class="idx">' + pad2(i + 1) + '</span><span class="txt">' + esc(s) + '</span></div>';
+    }).join('')
+    : '<div class="empty" style="padding:28px">该分类下没有可读字符串</div>';
+
+  $('#reconOut').style.display = 'none';
+}
+
+function reconstruct() {
+  const b = state.bin;
+  if (!b) return;
+  const base = b.name.replace(/\.[^.]+$/, '');
+  const cls = pascal(base);
+  const urls = b.urls.slice(0, 4);
+  const paths = b.paths.filter(s => !/\.(dll|so|exe)$/i.test(s)).slice(0, 3);
+  const errs = b.errors.slice(0, 4);
+  const apis = b.apis.slice(0, 8);
+  const ns = 'Recovered.' + cls;
+  let code = '', lang = 'C#', file = cls + '.cs';
+
+  const head = (commentChar, label) =>
+    commentChar + ' ── POLYFORGE 启发式重建 ────────────────────────────\n' +
+    commentChar + ' 来源文件 : ' + b.path + '\n' +
+    commentChar + ' 文件格式 : ' + b.type + '（' + b.size + ' 字节）\n' +
+    commentChar + ' 推断语言 : ' + label + '\n' +
+    commentChar + ' 信息熵   : ' + b.entropy.toFixed(2) + ' / 8.00\n' +
+    commentChar + ' 说明     : 依据文件头、元数据与运行时字符串还原的结构骨架，\n' +
+    commentChar + '            并非原始源码，业务逻辑需人工补全。\n' +
+    commentChar + '\n';
+
+  if (b.magic && b.magic.fmt === 'PE' && b.isDotNet) {
+    lang = 'C#';
+    file = cls + '.cs';
+    code = head('//', 'C# (.NET)') +
+`using System;
+using System.Windows;
+
+namespace ${ns}
+{
+    /// <summary>Recovered from ${b.name}</summary>
+    public partial class ${cls} : Window
+    {
+        private const string ApiBase = ${urls[0] ? JSON.stringify(urls[0]) : '""'};
+${urls.slice(1, 3).map((u, i) => '        private const string Endpoint' + (i + 2) + ' = ' + JSON.stringify(u) + ';').join('\n')}
+${paths[0] ? '        private static readonly string ConfigPath = ' + JSON.stringify(paths[0]) + ';' : '        private static readonly string ConfigPath = "config.json";'}
+
+        public ${cls}()
+        {
+            InitializeComponent();
+            // TODO: 原工程在此初始化视图与依赖
+        }
+
+        private void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            // 检测到的原生调用：${apis.length ? apis.join(', ') : '（无）'}
+            LoadData();
+        }
+
+        private void LoadData()
+        {
+            // TODO: 还原数据加载逻辑
+${errs.map(err => '            // 错误分支线索: ' + JSON.stringify(err)).join('\n') || '            // 未发现错误字符串'}
+            throw new NotImplementedException("Recovered stub: " + nameof(LoadData));
+        }
+    }
+}
+`;
+  } else if (b.magic && (b.magic.fmt === 'DEX' || b.isApk)) {
+    lang = 'Kotlin';
+    file = cls + 'Activity.kt';
+    code = head('//', 'Kotlin (Android)') +
+`package recovered.${slugPkg(cls)}
+
+import android.app.Activity
+import android.os.Bundle
+import android.util.Log
+
+/**
+ * Recovered from ${b.name}
+ * 推断入口：MainActivity
+ */
+class ${cls}Activity : Activity() {
+
+    private val apiBase: String = ${urls[0] ? JSON.stringify(urls[0]) : '""'}
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // TODO: setContentView(R.layout.activity_main)
+        restoreState()
+    }
+
+    private fun restoreState() {
+${urls.slice(1, 3).map(u => '        val endpoint = ' + JSON.stringify(u)).join('\n') || '        // 未提取到接口地址'}
+${paths.slice(0, 2).map(p => '        val asset = ' + JSON.stringify(p)).join('\n')}
+        // 检测到的系统/框架调用：${apis.length ? apis.join(', ') : '（无）'}
+${errs.map(err => '        // 错误线索: ' + JSON.stringify(err)).join('\n') || '        // 未提取到错误字符串'}
+        Log.d("${cls}", "recovered stub") // TODO: 实现真实逻辑
+    }
+}
+`;
+  } else if (b.magic && b.magic.fmt === 'PE') {
+    lang = 'C++';
+    file = cls + '.cpp';
+    code = head('//', 'C++ (原生 PE)') +
+`#include <windows.h>
+#include <string>
+
+// Recovered from ${b.name}
+namespace recovered {
+
+constexpr const char* kApiBase = ${urls[0] ? JSON.stringify(urls[0]) : '""'};
+
+${paths[0] ? 'constexpr const char* kConfigPath = ' + JSON.stringify(paths[0]) + ';' : ''}
+
+class ${cls} {
+public:
+    bool Initialize(HINSTANCE instance) {
+        // TODO: 还原窗口创建与消息循环
+        return true;
+    }
+
+    void Shutdown() {
+        // TODO: 释放资源
+    }
+};
+
+} // namespace recovered
+
+int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
+    recovered::${cls} app;
+    if (!app.Initialize(hInst)) return 1;
+    // TODO: message loop
+    app.Shutdown();
+    return 0;
+}
+`;
+  } else if (b.magic && b.magic.fmt === 'CLASS') {
+    lang = 'Java';
+    file = cls + '.java';
+    code = head('//', 'Java (字节码)') +
+`package recovered.${slugPkg(cls)};
+
+/**
+ * Recovered from ${b.name}
+ */
+public class ${cls} {
+
+    private static final String API_BASE = ${urls[0] ? JSON.stringify(urls[0]) : '""'};
+
+    public void initialize() {
+${paths.slice(0, 2).map(p => '        String resource = ' + JSON.stringify(p) + ';').join('\n') || '        // TODO: 加载资源'}
+${errs.map(err => '        // 错误线索: ' + JSON.stringify(err)).join('\n')}
+        throw new UnsupportedOperationException("Recovered stub");
+    }
+}
+`;
+  } else {
+    lang = '伪代码';
+    file = cls + '.txt';
+    code = head('//', '未知格式') +
+`// 无法从容器中确定稳定的语言特征，以下为线索聚合：
+//
+// 候选接口：
+${(urls.length ? urls : ['（无）']).map(u => '//   ' + u).join('\n')}
+//
+// 候选资源：
+${(paths.length ? paths : ['（无）']).map(p => '//   ' + p).join('\n')}
+//
+// 候选系统调用：
+${(apis.length ? apis : ['（无）']).map(a => '//   ' + a).join('\n')}
+//
+// 候选错误信息：
+${(errs.length ? errs : ['（无）']).map(e => '//   ' + e).join('\n')}
+//
+// TODO: 提供该文件的安装包 / 符号表，可获得更精确的重建结果。
+`;
+  }
+
+  $('#reconOut').style.display = 'block';
+  $('#reconFile').textContent = file + '  ·  ' + lang;
+  $('#reconPre').innerHTML = highlight(code);
+  $('#reconPre').dataset.raw = code;
+  state.recon = { file, lang, code };
+  $('#reconOut').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  toast('已重建 ' + file);
+}
+
+/* ============================================================
+   ZIP 打包（store 模式）
+   ============================================================ */
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(u8) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+function makeZip(files) {
+  const enc = new TextEncoder();
+  const parts = [];
+  const central = [];
+  let offset = 0;
+  const now = new Date();
+  const dosTime = ((now.getHours() << 11) | (now.getMinutes() << 5) | Math.floor(now.getSeconds() / 2)) & 0xFFFF;
+  const dosDate = (((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate()) & 0xFFFF;
+
+  for (const f of files) {
+    const nameBytes = enc.encode(f.path);
+    const data = enc.encode(f.text);
+    const crc = crc32(data);
+    const local = new Uint8Array(30 + nameBytes.length);
+    const dv = new DataView(local.buffer);
+    dv.setUint32(0, 0x04034b50, true);
+    dv.setUint16(4, 20, true);
+    dv.setUint16(6, 0x0800, true);
+    dv.setUint16(8, 0, true);
+    dv.setUint16(10, dosTime, true);
+    dv.setUint16(12, dosDate, true);
+    dv.setUint32(14, crc, true);
+    dv.setUint32(18, data.length, true);
+    dv.setUint32(22, data.length, true);
+    dv.setUint16(26, nameBytes.length, true);
+    dv.setUint16(28, 0, true);
+    local.set(nameBytes, 30);
+    parts.push(local, data);
+    central.push({ nameBytes, crc, size: data.length, offset });
+    offset += local.length + data.length;
+  }
+
+  const cdStart = offset;
+  let cdSize = 0;
+  const cdParts = [];
+  for (const c of central) {
+    const h = new Uint8Array(46 + c.nameBytes.length);
+    const dv = new DataView(h.buffer);
+    dv.setUint32(0, 0x02014b50, true);
+    dv.setUint16(4, 20, true);
+    dv.setUint16(6, 20, true);
+    dv.setUint16(8, 0x0800, true);
+    dv.setUint16(10, 0, true);
+    dv.setUint16(12, dosTime, true);
+    dv.setUint16(14, dosDate, true);
+    dv.setUint32(16, c.crc, true);
+    dv.setUint32(20, c.size, true);
+    dv.setUint32(24, c.size, true);
+    dv.setUint16(28, c.nameBytes.length, true);
+    dv.setUint32(42, c.offset, true);
+    h.set(c.nameBytes, 46);
+    cdParts.push(h);
+    cdSize += h.length;
+  }
+
+  const eocd = new Uint8Array(22);
+  const dv = new DataView(eocd.buffer);
+  dv.setUint32(0, 0x06054b50, true);
+  dv.setUint16(8, central.length, true);
+  dv.setUint16(10, central.length, true);
+  dv.setUint32(12, cdSize, true);
+  dv.setUint32(16, cdStart, true);
+
+  return new Blob([...parts, ...cdParts, eocd], { type: 'application/zip' });
+}
+
+/* ============================================================
+   演示数据
+   ============================================================ */
+function demoExe() {
+  const enc = new TextEncoder();
+  const chunks = [];
+  chunks.push(new Uint8Array([
+    0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00,
+    0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+  ]));
+  chunks.push(enc.encode('This program cannot be run in DOS mode.\r\r\n$'));
+  const strs = [
+    'BSJB', 'v4.0.30319', 'mscoree.dll', '_CorExeMain',
+    'System.Windows', 'PresentationFramework', 'System.Xaml',
+    'PolyDesk.MainWindow', 'PolyDesk.Services.OrderService', 'InitializeComponent',
+    'https://api.polydesk.io/v2/orders', 'https://cdn.polydesk.io/assets/splash.png',
+    'https://auth.polydesk.io/oauth/token',
+    'C:\\Program Files\\PolyDesk\\config.json',
+    'C:\\Users\\Public\\PolyDesk\\cache.db',
+    'HKEY_CURRENT_USER\\Software\\PolyDesk',
+    'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run',
+    'LICENSE_KEY_INVALID', 'Failed to connect to license server',
+    'Unable to load configuration file',
+    '网络连接超时，请重试',
+    'user32.dll', 'kernel32.dll', 'sqlite3.dll',
+    'CreateFileW', 'RegQueryValueExW', 'DrawTextW', 'LoadLibraryExW',
+    'OrderService', 'SyncWorker', 'TelemetryClient', 'settings.json', 'orders.dat'
+  ];
+  for (const s of strs) { chunks.push(enc.encode(s)); chunks.push(new Uint8Array([0])); }
+  const filler = new Uint8Array(6144);
+  for (let i = 0; i < filler.length; i++) filler[i] = 0x80 + ((i * 37) % 80);
+  chunks.push(filler);
+  return new Blob(chunks, { type: 'application/octet-stream' });
+}
+
+function loadDemo() {
+  const proj = 'PolyDesk/';
+  const files = [
+    ['PolyDesk.sln', `\nMicrosoft Visual Studio Solution File, Format Version 12.00\n# Visual Studio Version 17\nProject("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PolyDesk", "PolyDesk\\PolyDesk.csproj", "{9A19103F-16F7-4668-BE54-9A1E7A4F7556}"\nEndProject\nGlobal\nEndGlobal\n`],
+    [proj + 'PolyDesk.csproj', `<Project Sdk="Microsoft.NET.Sdk">\n  <PropertyGroup>\n    <OutputType>WinExe</OutputType>\n    <TargetFramework>net8.0-windows</TargetFramework>\n    <UseWPF>true</UseWPF>\n    <Nullable>enable</Nullable>\n  </PropertyGroup>\n</Project>\n`],
+    [proj + 'App.xaml', `<Application x:Class="PolyDesk.App"\n             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"\n             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"\n             StartupUri="MainWindow.xaml">\n    <Application.Resources>\n        <SolidColorBrush x:Key="AccentBrush" Color="#2DD4FF" />\n    </Application.Resources>\n</Application>\n`],
+    [proj + 'App.xaml.cs', `using System.Windows;\n\nnamespace PolyDesk;\n\npublic partial class App : Application\n{\n    protected override void OnStartup(StartupEventArgs e)\n    {\n        base.OnStartup(e);\n        var service = new Services.OrderService();\n        service.Initialize();\n    }\n}\n`],
+    [proj + 'MainWindow.xaml', `<Window x:Class="PolyDesk.MainWindow"\n        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"\n        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"\n        Title="PolyDesk" Height="720" Width="1120">\n    <Grid Margin="24">\n        <Grid.RowDefinitions>\n            <RowDefinition Height="Auto" />\n            <RowDefinition Height="*" />\n        </Grid.RowDefinitions>\n        <StackPanel Orientation="Horizontal">\n            <TextBlock Text="PolyDesk" FontSize="28" FontWeight="Bold"\n                       Foreground="{StaticResource AccentBrush}" />\n            <Button Content="同步订单" Margin="24,0,0,0" Click="OnSyncClick" />\n        </StackPanel>\n        <ListView Grid.Row="1" x:Name="OrdersList" Margin="0,18,0,0">\n            <ListView.ItemTemplate>\n                <DataTemplate>\n                    <StackPanel>\n                        <TextBlock Text="{Binding Title}" FontSize="15" />\n                        <TextBlock Text="{Binding Status}" Opacity="0.6" />\n                    </StackPanel>\n                </DataTemplate>\n            </ListView.ItemTemplate>\n        </ListView>\n    </Grid>\n</Window>\n`],
+    [proj + 'MainWindow.xaml.cs', `using System.Windows;\nusing PolyDesk.Services;\n\nnamespace PolyDesk;\n\npublic partial class MainWindow : Window\n{\n    private readonly OrderService _service = new();\n\n    public MainWindow()\n    {\n        InitializeComponent();\n        Loaded += async (_, _) => OrdersList.ItemsSource = await _service.LoadOrdersAsync();\n    }\n\n    private async void OnSyncClick(object sender, RoutedEventArgs e)\n    {\n        await _service.SyncAsync();\n    }\n}\n`],
+    [proj + 'Services/OrderService.cs', `using System.Threading.Tasks;\n\nnamespace PolyDesk.Services;\n\npublic class OrderService\n{\n    private const string ApiBase = "https://api.polydesk.io/v2/orders";\n\n    public void Initialize() { /* 读取注册表配置 */ }\n\n    public Task<Order[]> LoadOrdersAsync()\n    {\n        return Task.FromResult(new[]\n        {\n            new Order { Title = "订单 #1042", Status = "已支付" },\n            new Order { Title = "订单 #1043", Status = "待发货" }\n        });\n    }\n\n    public Task SyncAsync() => Task.Delay(120);\n}\n\npublic class Order\n{\n    public string Title { get; set; } = "";\n    public string Status { get; set; } = "";\n}\n`],
+    [proj + 'Models/Order.cs', `namespace PolyDesk.Models;\n\npublic sealed class OrderRecord\n{\n    public int Id { get; init; }\n    public string Title { get; init; } = "";\n    public string Status { get; init; } = "";\n}\n`],
+    [proj + 'Assets/theme.json', `{\n  "accent": "#2DD4FF",\n  "surface": "#0B1523",\n  "font": "Segoe UI"\n}\n`],
+    [proj + 'Properties/Settings.json', `{\n  "lastSync": "2026-11-20T09:12:44Z",\n  "licenseKey": "PD-XXXX-XXXX-XXXX",\n  "syncInterval": 300\n}\n`],
+    [proj + 'README.md', `# PolyDesk\n\nWindows 桌面订单管理示例工程（WPF / .NET 8）。\n`],
+  ];
+  const entries = files.map(([path, text]) => ({ path, file: new File([text], path.split('/').pop(), { type: 'text/plain' }) }));
+  entries.push({ path: proj + 'bin/Release/PolyDesk.exe', file: new File([demoExe()], 'PolyDesk.exe', { type: 'application/octet-stream' }) });
+
+  state.entries = entries;
+  state.analysis = null;
+  state.bin = null;
+  state.binEntry = null;
+  state.out = null;
+  state.targetTouched = false;
+  state.appNameTouched = false;
+  $('#appName').value = 'PolyDesk';
+  $('#convertOut').style.display = 'none';
+  $('#convertLog').style.display = 'none';
+  $('#reconOut').style.display = 'none';
+  $$('#pipeline .step').forEach(s => s.className = 'step');
+  renderSelection();
+  runAnalysis().then(() => {
+    pickBinary();
+    toast('已载入演示工程：PolyDesk (WPF) + PolyDesk.exe');
+  });
+}
+
+/* ============================================================
+   交互绑定
+   ============================================================ */
+function switchView(name) {
+  state.tab = name;
+  $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === name));
+  $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
+  if (name === 'convert' && state.analysis) renderConvertSrc();
+  if (name === 'binary' && state.binEntry) {
+    if (state.bin && state.bin.path === state.binEntry.path) renderBinary();
+    else runBinary(state.binEntry, true);
+  }
+}
+
+function setupInputs() {
+  const fileInput = $('#fileInput');
+  const folderInput = $('#folderInput');
+
+  $('#pickFiles').onclick = (e) => { e.stopPropagation(); fileInput.click(); };
+  $('#pickFolder').onclick = (e) => { e.stopPropagation(); folderInput.click(); };
+  $('#loadDemo').onclick = (e) => { e.stopPropagation(); loadDemo(); };
+
+  const handle = (list) => {
+    const entries = Array.from(list).map(f => ({ path: f.webkitRelativePath || f.name, file: f }))
+      .filter(e => e.file.size >= 0 && e.file.name !== '.DS_Store');
+    if (!entries.length) return;
+    state.entries = entries.slice(0, 4000);
+    state.analysis = null;
+    state.bin = null;
+    state.out = null;
+    state.targetTouched = false;
+    $('#detectResult').style.display = 'none';
+    $('#detectEmpty').style.display = 'block';
+    $('#convertResult').style.display = 'none';
+    $('#convertEmpty').style.display = 'block';
+    $('#binResult').style.display = 'none';
+    $('#binEmpty').style.display = 'block';
+    $('#reconOut').style.display = 'none';
+    $('#convertOut').style.display = 'none';
+    $('#convertLog').style.display = 'none';
+    $$('#pipeline .step').forEach(s => s.className = 'step');
+    renderSelection();
+    runAnalysis();
+  };
+
+  fileInput.onchange = (e) => { handle(e.target.files); e.target.value = ''; };
+  folderInput.onchange = (e) => { handle(e.target.files); e.target.value = ''; };
+
+  const dz = $('#dropzone');
+  ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, (e) => {
+    e.preventDefault(); e.stopPropagation(); dz.classList.add('drag');
+  }));
+  ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, (e) => {
+    e.preventDefault(); e.stopPropagation(); dz.classList.remove('drag');
+  }));
+
+  dz.addEventListener('drop', async (e) => {
+    const dt = e.dataTransfer;
+    if (!dt) return;
+    const items = dt.items ? Array.from(dt.items) : [];
+    const hasEntries = items.some(it => it.webkitGetAsEntry && it.webkitGetAsEntry());
+    if (hasEntries) {
+      const collected = [];
+      const walkers = items.map(it => {
+        const entry = it.webkitGetAsEntry && it.webkitGetAsEntry();
+        return entry ? walkEntry(entry, '') : Promise.resolve([]);
+      });
+      (await Promise.all(walkers)).forEach(arr => collected.push(...arr));
+      if (!collected.length) return;
+      state.entries = collected.slice(0, 4000);
+      state.analysis = null; state.bin = null; state.out = null; state.targetTouched = false;
+      $('#detectResult').style.display = 'none';
+      $('#convertResult').style.display = 'none';
+      $('#convertOut').style.display = 'none';
+      $('#binResult').style.display = 'none';
+      renderSelection();
+      runAnalysis();
+    } else if (dt.files && dt.files.length) {
+      handle(dt.files);
+    }
+  });
+
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', e => e.preventDefault());
+
+  $$('.tab').forEach(t => t.onclick = () => switchView(t.dataset.view));
+
+  $('#exportReport').onclick = exportReport;
+  $('#toConvert').onclick = () => switchView('convert');
+  $('#runConvert').onclick = runConvert;
+  $('#dlZip').onclick = () => {
+    if (!state.out) return;
+    downloadBlob(slugPkg(state.out.app) + '-project.zip', makeZip(state.out.files));
+    toast('已打包 ' + state.out.files.length + ' 个文件');
+  };
+  $('#dlPlan').onclick = () => {
+    if (!state.out) return;
+    downloadText('MIGRATION.md', state.out.plan, 'text/markdown;charset=utf-8');
+  };
+  $('#dlFile').onclick = () => {
+    if (!state.out) return;
+    const f = state.out.files[state.activeFile];
+    downloadText(f.path.split('/').pop(), f.text);
+  };
+  $('#copyCode').onclick = () => {
+    if (!state.out) return;
+    copyText(state.out.files[state.activeFile].text, '代码已复制');
+  };
+  $('#copyRecon').onclick = () => {
+    if (!state.recon) return;
+    copyText(state.recon.code, '重建代码已复制');
+  };
+  $('#appName').oninput = () => { state.appNameTouched = true; };
+
+  $('#reconstruct').onclick = reconstruct;
+  $('#dlBinReport').onclick = exportBinReport;
+}
+
+async function walkEntry(entry, parent) {
+  const path = parent ? parent.replace(/\/$/, '') + '/' + entry.name : entry.name;
+  if (entry.isFile) {
+    if (entry.name === '.DS_Store' || entry.name === 'Thumbs.db') return [];
+    try {
+      const file = await new Promise((res, rej) => entry.file(res, rej));
+      return [{ path, file }];
+    } catch (e) { return []; }
+  }
+  if (entry.isDirectory) {
+    if (/^(node_modules|\.git|\.vs|\.idea|obj|__pycache__|\.gradle|\.next|dist)$/i.test(entry.name)) return [];
+    const reader = entry.createDirectoryReader ? entry.createDirectoryReader() : entry.createReader();
+    const all = [];
+    for (;;) {
+      const batch = await new Promise((res) => reader.readEntries(res, () => res([])));
+      if (!batch.length) break;
+      all.push(...batch);
+      if (all.length > 3000) break;
+    }
+    const nested = await Promise.all(all.map(e => walkEntry(e, path)));
+    return nested.flat();
+  }
+  return [];
+}
+
+function copyText(text, msg) {
+  const done = () => toast(msg || '已复制');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  } else fallbackCopy(text, done);
+}
+function fallbackCopy(text, done) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); done(); } catch (e) { toast('复制失败'); }
+  ta.remove();
+}
+
+/* ---------------- 导出 ---------------- */
+function exportReport() {
+  const a = state.analysis;
+  if (!a) return;
+  const p = langOf(a.primary.key);
+  const v = VERDICT_META[a.verdict.key] || VERDICT_META.unknown;
+  const lines = [
+    '# POLYFORGE · 项目识别报告',
+    '',
+    '- 生成时间：' + new Date().toLocaleString('zh-CN'),
+    '- 文件数量：' + a.files + '（' + fmtBytes(a.totalSize) + '）',
+    '- 主语言：' + p.n + '（' + a.primary.pct.toFixed(1) + '%）',
+    '- 平台判定：' + v.label,
+    '- 文本 / 二进制：' + a.textCount + ' / ' + a.binaryCount,
+    '',
+    '## 语言分布',
+    '',
+    '| 语言 | 占比 | 说明 |',
+    '| --- | --- | --- |'
+  ];
+  a.langs.slice(0, 12).forEach(l => {
+    const m = langOf(l.key);
+    lines.push('| ' + m.n + ' | ' + l.pct.toFixed(1) + '% | ' + m.hint + ' |');
+  });
+  lines.push('', '## 框架特征', '');
+  lines.push(a.fws.length ? a.fws.slice(0, 15).map(f => '- ' + f[0]).join('\n') : '- 未匹配到已知框架');
+  lines.push('', '## 文件列表', '', '| 文件 | 语言 | 依据 | 大小 |', '| --- | --- | --- | --- |');
+  a.results.slice().sort((x, y) => y.size - x.size).slice(0, 400).forEach(r => {
+    lines.push('| ' + r.path + ' | ' + langOf(r.lang).n + ' | ' + (r.via || '—') + ' | ' + fmtBytes(r.size) + ' |');
+  });
+  downloadText('polyforge-report.md', lines.join('\n'), 'text/markdown;charset=utf-8');
+  toast('识别报告已导出');
+}
+
+function exportBinReport() {
+  const b = state.bin;
+  if (!b) return;
+  const lines = [
+    '# POLYFORGE · 二进制分析报告',
+    '',
+    '- 文件：' + b.path,
+    '- 大小：' + fmtBytes(b.size),
+    '- 格式：' + b.type,
+    '- 推断语言：' + langOf(b.langKey).n,
+    '- 信息熵：' + b.entropy.toFixed(2) + ' / 8.00',
+    '- 可读字符串：' + b.strings.length,
+    '',
+    '## URL / 域名',
+    ...(b.urls.length ? b.urls.map(s => '- `' + s + '`') : ['- 无']),
+    '',
+    '## 路径',
+    ...(b.paths.length ? b.paths.map(s => '- `' + s + '`') : ['- 无']),
+    '',
+    '## 系统 API / 符号',
+    ...(b.apis.length ? b.apis.map(s => '- `' + s + '`') : ['- 无']),
+    '',
+    '## 错误信息',
+    ...(b.errors.length ? b.errors.map(s => '- `' + s + '`') : ['- 无']),
+    '',
+    '> 提示：字符串与元数据线索由本地启发式算法提取，仅用于迁移评估。'
+  ];
+  downloadText('binary-analysis.md', lines.join('\n'), 'text/markdown;charset=utf-8');
+  toast('分析报告已导出');
+}
+
+/* ---------------- 启动 ---------------- */
+setupInputs();
+$('#appName').addEventListener('input', () => { state.appNameTouched = true; });
+
+/* 关于 / About */
+const aboutModal = $('#aboutModal');
+$('#aboutBtn').onclick = () => aboutModal.classList.add('open');
+$('#aboutClose').onclick = () => aboutModal.classList.remove('open');
+aboutModal.addEventListener('click', (e) => { if (e.target === aboutModal) aboutModal.classList.remove('open'); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') aboutModal.classList.remove('open'); });
+
+</script>
+</body>
+</html>

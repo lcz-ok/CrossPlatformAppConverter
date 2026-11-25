@@ -1,0 +1,27 @@
+# dependencies / build output
+node_modules/
+desktop/node_modules/
+desktop/index.html
+release/
+
+# android
+android/.gradle/
+android/build/
+android/app/build/
+android/app/src/main/assets/index.html
+android/local.properties
+*.apk
+*.aab
+
+# tooling
+.trae-html-share-packages/
+
+# secrets
+*.keystore
+*.jks
+.secrets/
+
+# misc
+.DS_Store
+Thumbs.db
+*.log
